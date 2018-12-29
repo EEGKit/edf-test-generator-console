@@ -39,7 +39,7 @@ int main(int argc, char **argv)
   if(argc != 5)
   {
     printf("\nusage: edf_generator <filetype EDF or BDF> <duration in seconds> <sample frequency> <signal frequency>\n"
-           "\nexample: edf_generator BDF 30 1000 10\n");
+           "\nexample: edf_generator BDF 30 1000 10\n\n");
 
     return EXIT_FAILURE;
   }
