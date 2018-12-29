@@ -29,26 +29,30 @@ int main(int argc, char **argv)
       duration=1,
       sf=1;
 
-  double *buf,
+  double *buf=NULL,
          w=1,
          sine_1=0,
-         signalfreq=1;
+         signalfreq=1,
+         physmax=1200,
+         physmin=-1200,
+         peakamp=1000;
 
   setlocale(LC_ALL, "C");
 
-  if(argc != 5)
+  if((argc != 5) && (argc != 8))
   {
-    printf("\nusage: edf_generator <filetype EDF or BDF> <duration in seconds> <sample frequency> <signal frequency>\n"
-           "\nexample: edf_generator BDF 30 1000 10\n\n");
+    printf("\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency>\n"
+           "[<physical max> <physical min> <peak amplitude>]\n"
+           "\nexample: edf_generator bdf 30 1000 10\n\n");
 
     return EXIT_FAILURE;
   }
 
-  if(!strcmp(argv[1], "EDF"))
+  if(!strcmp(argv[1], "edf"))
   {
     filetype = 0;
   }
-  else if(!strcmp(argv[1], "BDF"))
+  else if(!strcmp(argv[1], "bdf"))
     {
       filetype = 1;
     }
@@ -83,6 +87,43 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
+  if(argc == 8)
+  {
+    physmax = atof(argv[5]);
+
+    physmin = atof(argv[6]);
+
+    peakamp = atof(argv[7]);
+
+    if(physmax > 9999999.5)
+    {
+      printf("error: physical maximum must be <= 9999999\n");
+
+      return EXIT_FAILURE;
+    }
+
+    if(physmin < -9999999.5)
+    {
+      printf("error: physical minimum must be >= -9999999\n");
+
+      return EXIT_FAILURE;
+    }
+
+    if(peakamp < 0.9999)
+    {
+      printf("error: peak amplitude must be >= 1\n");
+
+      return EXIT_FAILURE;
+    }
+
+    if((physmax < (peakamp * 1.05)) || (physmin > (peakamp * -1.05)))
+    {
+      printf("error: physical maximum must be higher than peak amplitude * 1.05 and physical minimum must be more lower than peak amplitude * -1.05\n");
+
+      return EXIT_FAILURE;
+    }
+  }
+
   buf = (double *)malloc(sf * sizeof(double));
   if(!buf)
   {
@@ -114,21 +155,40 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if(edf_set_digital_maximum(hdl, 0, 8388607))
+  if(filetype)
   {
-    printf("error: edf_set_digital_maximum()\n");
+    if(edf_set_digital_maximum(hdl, 0, 8388607))
+    {
+      printf("error: edf_set_digital_maximum()\n");
 
-    return EXIT_FAILURE;
+      return EXIT_FAILURE;
+    }
+
+    if(edf_set_digital_minimum(hdl, 0, -8388608))
+    {
+      printf("error: edf_set_digital_minimum()\n");
+
+      return EXIT_FAILURE;
+    }
+  }
+  else
+  {
+    if(edf_set_digital_maximum(hdl, 0, 32767))
+    {
+      printf("error: edf_set_digital_maximum()\n");
+
+      return EXIT_FAILURE;
+    }
+
+    if(edf_set_digital_minimum(hdl, 0, -32768))
+    {
+      printf("error: edf_set_digital_minimum()\n");
+
+      return EXIT_FAILURE;
+    }
   }
 
-  if(edf_set_digital_minimum(hdl, 0, -8388608))
-  {
-    printf("error: edf_set_digital_minimum()\n");
-
-    return EXIT_FAILURE;
-  }
-
-  if(edf_set_physical_maximum(hdl, 0, 1200.0))
+  if(edf_set_physical_maximum(hdl, 0, physmax))
   {
     printf("error: edf_set_physical_maximum()\n");
 
@@ -136,7 +196,7 @@ int main(int argc, char **argv)
   }
 
 
-  if(edf_set_physical_minimum(hdl, 0, -1200.0))
+  if(edf_set_physical_minimum(hdl, 0, physmin))
   {
     printf("error: edf_set_physical_minimum()\n");
 
@@ -168,7 +228,7 @@ int main(int argc, char **argv)
     for(i=0; i<sf; i++)
     {
       sine_1 += w;
-      buf[i] = sin(sine_1) * 1000.0;
+      buf[i] = sin(sine_1) * peakamp;
     }
 
     if(edfwrite_physical_samples(hdl, buf))
