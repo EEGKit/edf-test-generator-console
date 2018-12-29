@@ -11,11 +11,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <locale.h>
 #include <string.h>
 #include <math.h>
-#include <time.h>
-#include <errno.h>
 
 #include "edflib.h"
 
@@ -27,7 +24,9 @@ int main(int argc, char **argv)
       hdl=-1,
       filetype=0,
       duration=1,
-      sf=1;
+      sf=1,
+      digmax=0,
+      digmin=0;
 
   double *buf=NULL,
          w=1,
@@ -37,13 +36,16 @@ int main(int argc, char **argv)
          physmin=-1200,
          peakamp=1000;
 
-  setlocale(LC_ALL, "C");
+  char physdim[32]="uV",
+       str[128]="";
 
-  if((argc != 5) && (argc != 8))
+  if((argc != 5) && (argc != 9) && (argc != 11))
   {
     printf("\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency>\n"
-           "[<physical max> <physical min> <peak amplitude>]\n"
-           "\nexample: edf_generator bdf 30 1000 10\n\n");
+           " [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]\n"
+           "\nexample: edf_generator edf 10 1000 1\n"
+           "\nexample: edf_generator edf 10 113.67 1 3200 -3200 100 uV\n"
+           "\nexample: edf_generator bdf 10 1000 1.5 1000 -1000 300 mV 1048575 -1048576\n\n");
 
     return EXIT_FAILURE;
   }
@@ -51,10 +53,18 @@ int main(int argc, char **argv)
   if(!strcmp(argv[1], "edf"))
   {
     filetype = 0;
+
+    digmax = 32767;
+
+    digmin = -32768;
   }
   else if(!strcmp(argv[1], "bdf"))
     {
       filetype = 1;
+
+      digmax = 8388607;
+
+      digmin = -8388608;
     }
     else
     {
@@ -87,13 +97,17 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if(argc == 8)
+  if((argc == 9) || (argc == 11))
   {
     physmax = atof(argv[5]);
 
     physmin = atof(argv[6]);
 
     peakamp = atof(argv[7]);
+
+    strncpy(physdim, argv[8], 16);
+
+    physdim[16] = 0;
 
     if(physmax > 9999999.5)
     {
@@ -119,6 +133,53 @@ int main(int argc, char **argv)
     if((physmax < (peakamp * 1.05)) || (physmin > (peakamp * -1.05)))
     {
       printf("error: physical maximum must be higher than peak amplitude * 1.05 and physical minimum must be more lower than peak amplitude * -1.05\n");
+
+      return EXIT_FAILURE;
+    }
+  }
+
+  if(argc == 11)
+  {
+    digmax = atoi(argv[9]);
+
+    digmin = atoi(argv[10]);
+
+    if(filetype)
+    {
+      if(digmax > 8388607)
+      {
+        printf("error: digital max must be <= 8388607\n");
+
+        return EXIT_FAILURE;
+      }
+
+      if(digmin < -8388608)
+      {
+        printf("error: digital min must be >= -8388608\n");
+
+        return EXIT_FAILURE;
+      }
+    }
+    else
+    {
+      if(digmax > 32767)
+      {
+        printf("error: digital max must be <= 32767\n");
+
+        return EXIT_FAILURE;
+      }
+
+      if(digmin < -32768)
+      {
+        printf("error: digital min must be >= -32768\n");
+
+        return EXIT_FAILURE;
+      }
+    }
+
+    if(digmin >= digmax)
+    {
+      printf("error: digital min must be less than digital max\n");
 
       return EXIT_FAILURE;
     }
@@ -155,37 +216,18 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if(filetype)
+  if(edf_set_digital_maximum(hdl, 0, digmax))
   {
-    if(edf_set_digital_maximum(hdl, 0, 8388607))
-    {
-      printf("error: edf_set_digital_maximum()\n");
+    printf("error: edf_set_digital_maximum()\n");
 
-      return EXIT_FAILURE;
-    }
-
-    if(edf_set_digital_minimum(hdl, 0, -8388608))
-    {
-      printf("error: edf_set_digital_minimum()\n");
-
-      return EXIT_FAILURE;
-    }
+    return EXIT_FAILURE;
   }
-  else
+
+  if(edf_set_digital_minimum(hdl, 0, digmin))
   {
-    if(edf_set_digital_maximum(hdl, 0, 32767))
-    {
-      printf("error: edf_set_digital_maximum()\n");
+    printf("error: edf_set_digital_minimum()\n");
 
-      return EXIT_FAILURE;
-    }
-
-    if(edf_set_digital_minimum(hdl, 0, -32768))
-    {
-      printf("error: edf_set_digital_minimum()\n");
-
-      return EXIT_FAILURE;
-    }
+    return EXIT_FAILURE;
   }
 
   if(edf_set_physical_maximum(hdl, 0, physmax))
@@ -203,14 +245,16 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if(edf_set_physical_dimension(hdl, 0, "uV"))
+  if(edf_set_physical_dimension(hdl, 0, physdim))
   {
     printf("error: edf_set_physical_dimension()\n");
 
     return EXIT_FAILURE;
   }
 
-  if(edf_set_label(hdl, 0, "sine"))
+  snprintf(str, 18, "sine %.2fHz", signalfreq);
+
+  if(edf_set_label(hdl, 0, str))
   {
     printf("error: edf_set_label()\n");
 
