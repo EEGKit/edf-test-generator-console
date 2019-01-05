@@ -94,7 +94,7 @@ int main(int argc, char **argv)
   }
 
   sf = atoi(argv[3]);
-  if((sf < 4) || (sf > 96000))
+  if((sf < 4) || (sf > 200000))
   {
     printf("error: invalid sample frequency %i Hz\n", sf);
 
