@@ -17,11 +17,13 @@
 #include "edflib.h"
 
 
-#define FILETYPE_EDF  0
-#define FILETYPE_BDF  1
+#define FILETYPE_EDF    0
+#define FILETYPE_BDF    1
 
-#define WAVE_SINE     0
-#define WAVE_SQUARE   1
+#define WAVE_SINE       0
+#define WAVE_SQUARE     1
+#define WAVE_RAMP       2
+#define WAVE_TRIANGLE   3
 
 
 
@@ -41,6 +43,7 @@ int main(int argc, char **argv)
          q=1,
          sine_1=0,
          square_1=0,
+         triangle_1=0,
          signalfreq=1,
          physmax=1200,
          physmin=-1200,
@@ -53,11 +56,11 @@ int main(int argc, char **argv)
 
   if((argc != 7) && (argc != 11) && (argc != 13))
   {
-    printf("\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine or square> <dutycycle %%>"
+    printf("\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp or triangle> <dutycycle %%>"
            " [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]"
            "\nexample: edf_generator edf 10 1000 1 sine 50\n"
-           "\nexample: edf_generator edf 10 113.67 1 square 50 3200 -3200 100 uV\n"
-           "\nexample: edf_generator bdf 10 1000 1.5 square 10.5 1000 -1000 300 mV 1048575 -1048576\n\n");
+           "\nexample: edf_generator edf 30 113.67 3.2 square 50 3200 -3200 100 uV\n"
+           "\nexample: edf_generator bdf 10 1000 1.5 ramp 10.5 1000 -1000 300 mV 1048575 -1048576\n\n");
 
     return EXIT_FAILURE;
   }
@@ -117,15 +120,23 @@ int main(int argc, char **argv)
     {
       waveform = WAVE_SQUARE;
     }
-    else
-    {
-      printf("error: invalid waveform %s\n", argv[1]);
+    else if(!strcmp(argv[5], "ramp"))
+      {
+        waveform = WAVE_RAMP;
+      }
+      else if(!strcmp(argv[5], "triangle"))
+        {
+          waveform = WAVE_TRIANGLE;
+        }
+        else
+        {
+          printf("error: invalid waveform %s\n", argv[1]);
 
-      return EXIT_FAILURE;
-    }
+          return EXIT_FAILURE;
+        }
 
   dutycycle = atof(argv[6]);
-  if((dutycycle < 0.0999) || (dutycycle > 99.9001))
+  if((dutycycle < 0.099999) || (dutycycle > 100.000001))
   {
     printf("error: invalid duty cycle %f %%\n", dutycycle);
 
@@ -295,6 +306,14 @@ int main(int argc, char **argv)
     {
       snprintf(str, 18, "square %.2fHz", signalfreq);
     }
+    else if(waveform == WAVE_RAMP)
+      {
+        snprintf(str, 18, "ramp %.2fHz", signalfreq);
+      }
+      else if(waveform == WAVE_TRIANGLE)
+        {
+          snprintf(str, 18, "triangle %.2fHz", signalfreq);
+        }
 
   if(edf_set_label(hdl, 0, str))
   {
@@ -325,23 +344,63 @@ int main(int argc, char **argv)
       }
     }
     else if(waveform == WAVE_SQUARE)
-    {
-      for(i=0; i<sf; i++)
       {
-        square_1 += q;
-
-        ftmp = fmod(square_1, 1.0 / signalfreq);
-
-        if((ftmp * signalfreq) < (dutycycle / 100.0))
+        for(i=0; i<sf; i++)
         {
-          buf[i] = peakamp;
-        }
-        else
-        {
-          buf[i] = -peakamp;
+          square_1 += q;
+
+          ftmp = fmod(square_1, 1.0 / signalfreq);
+
+          if((ftmp * signalfreq) < (dutycycle / 100.0))
+          {
+            buf[i] = peakamp;
+          }
+          else
+          {
+            buf[i] = -peakamp;
+          }
         }
       }
-    }
+      else if(waveform == WAVE_RAMP)
+        {
+          for(i=0; i<sf; i++)
+          {
+            triangle_1 += q;
+
+            ftmp = fmod(triangle_1, 1.0 / signalfreq);
+
+            if((ftmp * signalfreq) < (dutycycle / 100.0))
+            {
+              buf[i] = peakamp * (200.0 / dutycycle) * ftmp * signalfreq - peakamp;
+            }
+            else
+            {
+              buf[i] = -peakamp;
+            }
+          }
+        }
+        else if(waveform == WAVE_TRIANGLE)
+          {
+            for(i=0; i<sf; i++)
+            {
+              triangle_1 += q;
+
+              ftmp = fmod(triangle_1, 1.0 / signalfreq);
+
+              if((ftmp * signalfreq) < (dutycycle / 200.0))
+              {
+                buf[i] = peakamp * (400.0 / dutycycle) * ftmp * signalfreq - peakamp;
+              }
+              else if((ftmp * signalfreq) < (dutycycle / 100.0))
+                {
+                  buf[i] = peakamp * (400.0 / dutycycle) * ((dutycycle / 100.0) - (ftmp * signalfreq)) - peakamp;
+                }
+                else
+                {
+                  buf[i] = -peakamp;
+                }
+            }
+          }
 
     if(edfwrite_physical_samples(hdl, buf))
     {
