@@ -1,11 +1,28 @@
 /*
-*****************************************************************************
+***************************************************************************
 *
-* Copyright (c) 2018 Teunis van Beelen
-* All rights reserved.
+* Author: Teunis van Beelen
 *
+* Copyright (C) 2018 - 2019 Teunis van Beelen
 *
-*****************************************************************************
+* Email: teuniz@gmail.com
+*
+***************************************************************************
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*
+***************************************************************************
 */
 
 
@@ -16,6 +33,7 @@
 
 #include "edflib.h"
 
+#define PROGRAM_VERSION "1.00"
 
 #define FILETYPE_EDF    0
 #define FILETYPE_BDF    1
@@ -24,6 +42,9 @@
 #define WAVE_SQUARE     1
 #define WAVE_RAMP       2
 #define WAVE_TRIANGLE   3
+
+
+void remove_trailing_zeros(char *);
 
 
 
@@ -52,15 +73,26 @@ int main(int argc, char **argv)
          ftmp;
 
   char physdim[32]="uV",
-       str[128]="";
+       str[1024]="";
+
+  const char waveforms_str[4][16]={"sine", "square", "ramp", "triangle"};
 
   if((argc != 7) && (argc != 11) && (argc != 13))
   {
-    printf("\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp or triangle> <dutycycle %%>"
-           " [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]"
-           "\nexample: edf_generator edf 10 1000 1 sine 50\n"
-           "\nexample: edf_generator edf 30 113.67 3.2 square 50 3200 -3200 100 uV\n"
-           "\nexample: edf_generator bdf 10 1000 1.5 ramp 10.5 1000 -1000 300 mV 1048575 -1048576\n\n");
+    printf("\nEDF generator version: " PROGRAM_VERSION "   Author: Teunis van Beelen   License: GPLv3\n"
+           "\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp or triangle> <dutycycle %%>"
+           " [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]\n"
+           "\nexample 1: edf_generator edf 10 1000 1 sine 50\n"
+           "EDF file, 10 seconds recording length, 1KHz samplerate, sine wave of 1Hz\n"
+           "\nexample 2: edf_generator edf 30 113 3.2 square 50 3200 -3200 100 uV\n"
+           "EDF file, 30 seconds recording length, 113Hz samplerate, square wave of 3.2Hz, duty cycle 50%%,\n"
+           "3200 physical maximum, -3200 physical minimum, 100uV peak amplitude\n"
+           "\nexample 3: edf_generator bdf 10 1000 1.5 ramp 10.5 1000 -1000 300 mV 1048575 -1048576\n"
+           "BDF file, 10 seconds recording length, 1KHz samplerate, triangular wave of 1.5Hz, duty cycle 10.5%%,\n"
+           "1000 physical maximum, -1000 physical minimum, 300mV peak amplitude, 1048575 digital maximum, -1048576 digital minimum\n"
+           "\nexample 4: edf_generator bdf 20 512 3.7 triangle 100 1000 -1000 300 uV\n"
+           "BDF file, 20 seconds recording length, 512Hz samplerate, triangular wave of 3.7Hz, duty cycle 100%%,\n"
+           "\n");
 
     return EXIT_FAILURE;
   }
@@ -239,18 +271,44 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
+  sprintf(str, "edf_generator_%iHz_%s_%f", sf, waveforms_str[waveform], signalfreq);
+
+  remove_trailing_zeros(str);
+
+  strcat(str, "Hz");
+
+  if(waveform)
+  {
+    sprintf(str + strlen(str), "_%f", dutycycle);
+
+    remove_trailing_zeros(str);
+
+    strcat(str, "pct");
+  }
+
   if(filetype == FILETYPE_BDF)
   {
-    hdl = edfopen_file_writeonly("edf_generator.bdf", EDFLIB_FILETYPE_BDFPLUS, 1);
+    strcat(str, ".bdf");
+
+    hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_BDFPLUS, 1);
   }
   else if(filetype == FILETYPE_EDF)
     {
-      hdl = edfopen_file_writeonly("edf_generator.edf", EDFLIB_FILETYPE_EDFPLUS, 1);
+      strcat(str, ".edf");
+
+      hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_EDFPLUS, 1);
     }
 
   if(hdl<0)
   {
     printf("error: edfopen_file_writeonly()\n");
+
+    return EXIT_FAILURE;
+  }
+
+  if(edf_set_startdatetime(hdl, 2000, 1, 1, 0, 0, 0))
+  {
+    printf("error: edf_set_startdatetime()\n");
 
     return EXIT_FAILURE;
   }
@@ -417,6 +475,100 @@ int main(int argc, char **argv)
   return EXIT_SUCCESS;
 }
 
+
+
+void remove_trailing_zeros(char *str)
+{
+  int i, j,
+      len,
+      numberfound,
+      dotfound,
+      decimalzerofound,
+      trailingzerofound=1;
+
+  while(trailingzerofound)
+  {
+    numberfound = 0;
+    dotfound = 0;
+    decimalzerofound = 0;
+    trailingzerofound = 0;
+
+    len = strlen(str);
+
+    for(i=0; i<len; i++)
+    {
+      if((str[i] < '0') || (str[i] > '9'))
+      {
+        if(decimalzerofound)
+        {
+          if(str[i-decimalzerofound-1] == '.')
+          {
+            decimalzerofound++;
+          }
+
+          for(j=i; j<(len+1); j++)
+          {
+            str[j-decimalzerofound] = str[j];
+          }
+
+          trailingzerofound = 1;
+
+          break;
+        }
+
+        if(str[i] != '.')
+        {
+          numberfound = 0;
+          dotfound = 0;
+          decimalzerofound = 0;
+        }
+      }
+      else
+      {
+        numberfound = 1;
+
+        if(str[i] > '0')
+        {
+          decimalzerofound = 0;
+        }
+      }
+
+      if((str[i] == '.') && numberfound)
+      {
+        dotfound = 1;
+      }
+
+      if((str[i] == '0') && dotfound)
+      {
+        decimalzerofound++;
+      }
+    }
+  }
+
+  if(decimalzerofound)
+  {
+    if(str[i-decimalzerofound-1] == '.')
+    {
+      decimalzerofound++;
+    }
+
+    for(j=i; j<(len+1); j++)
+    {
+      str[j-decimalzerofound] = str[j];
+    }
+  }
+
+  if(len > 1)
+  {
+    if(!((str[len - 2] < '0') || (str[i] > '9')))
+    {
+       if(str[len - 1] == '.')
+       {
+         str[len - 1] = 0;
+       }
+    }
+  }
+}
 
 
 
