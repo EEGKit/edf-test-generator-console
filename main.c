@@ -92,6 +92,7 @@ int main(int argc, char **argv)
            "1000 physical maximum, -1000 physical minimum, 300mV peak amplitude, 1048575 digital maximum, -1048576 digital minimum\n"
            "\nexample 4: edf_generator bdf 20 512 3.7 triangle 100 1000 -1000 300 uV\n"
            "BDF file, 20 seconds recording length, 512Hz samplerate, triangular wave of 3.7Hz, duty cycle 100%%,\n"
+           "1000 physical maximum, -1000 physical minimum, 300uV peak amplitude\n"
            "\n");
 
     return EXIT_FAILURE;
