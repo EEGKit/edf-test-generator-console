@@ -1,0 +1,16 @@
+
+usage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp or triangle> <dutycycle %> [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]
+
+example 1: edf_generator edf 10 1000 1 sine 50
+EDF file, 10 seconds recording length, 1KHz samplerate, sine wave of 1Hz
+
+example 2: edf_generator edf 30 113 3.2 square 50 3200 -3200 100 uV
+EDF file, 30 seconds recording length, 113Hz samplerate, square wave of 3.2Hz, duty cycle 50%,
+3200 physical maximum, -3200 physical minimum, 100uV peak amplitude
+
+example 3: edf_generator bdf 10 1000 1.5 ramp 10.5 1000 -1000 300 mV 1048575 -1048576
+BDF file, 10 seconds recording length, 1KHz samplerate, triangular wave of 1.5Hz, duty cycle 10.5%,
+1000 physical maximum, -1000 physical minimum, 300mV peak amplitude, 1048575 digital maximum, -1048576 digital minimum
+
+example 4: edf_generator bdf 20 512 3.7 triangle 100 1000 -1000 300 uV
+BDF file, 20 seconds recording length, 512Hz samplerate, triangular wave of 3.7Hz, duty cycle 100%,
