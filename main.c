@@ -30,18 +30,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "edflib.h"
 
-#define PROGRAM_VERSION "1.00"
+#define PROGRAM_VERSION    "1.01"
 
-#define FILETYPE_EDF    0
-#define FILETYPE_BDF    1
+#define FILETYPE_EDF       0
+#define FILETYPE_BDF       1
 
-#define WAVE_SINE       0
-#define WAVE_SQUARE     1
-#define WAVE_RAMP       2
-#define WAVE_TRIANGLE   3
+#define WAVE_SINE          0
+#define WAVE_SQUARE        1
+#define WAVE_RAMP          2
+#define WAVE_TRIANGLE      3
+#define WAVE_WHITE_NOISE   4
 
 
 void remove_trailing_zeros(char *);
@@ -51,13 +55,16 @@ void remove_trailing_zeros(char *);
 int main(int argc, char **argv)
 {
   int i, j,
+      err,
+      fd=-1,
       hdl=-1,
       filetype=0,
       duration=1,
       sf=1,
       digmax=0,
       digmin=0,
-      waveform;
+      waveform,
+      *randbuf=NULL;
 
   double *buf=NULL,
          w=1,
@@ -75,12 +82,12 @@ int main(int argc, char **argv)
   char physdim[32]="uV",
        str[1024]="";
 
-  const char waveforms_str[4][16]={"sine", "square", "ramp", "triangle"};
+  const char waveforms_str[5][16]={"sine", "square", "ramp", "triangle", "noise"};
 
   if((argc != 7) && (argc != 11) && (argc != 13))
   {
     printf("\nEDF generator version: " PROGRAM_VERSION "   Author: Teunis van Beelen   License: GPLv3\n"
-           "\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp or triangle> <dutycycle %%>"
+           "\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp, triangle or noise> <dutycycle %%>"
            " [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]\n"
            "\nexample 1: edf_generator edf 10 1000 1 sine 50\n"
            "EDF file, 10 seconds recording length, 1KHz samplerate, sine wave of 1Hz\n"
@@ -93,6 +100,8 @@ int main(int argc, char **argv)
            "\nexample 4: edf_generator bdf 20 512 3.7 triangle 100 1000 -1000 300 uV\n"
            "BDF file, 20 seconds recording length, 512Hz samplerate, triangular wave of 3.7Hz, duty cycle 100%%,\n"
            "1000 physical maximum, -1000 physical minimum, 300uV peak amplitude\n"
+           "\nexample 5: edf_generator edf 60 10000 1 noise 50\n"
+           "EDF file, 60 seconds recording length, 10KHz samplerate, noise\n"
            "\n");
 
     return EXIT_FAILURE;
@@ -161,12 +170,16 @@ int main(int argc, char **argv)
         {
           waveform = WAVE_TRIANGLE;
         }
-        else
-        {
-          printf("error: invalid waveform %s\n", argv[1]);
+        else if(!strcmp(argv[5], "noise"))
+          {
+            waveform = WAVE_WHITE_NOISE;
+          }
+          else
+          {
+            printf("error: invalid waveform %s\n", argv[1]);
 
-          return EXIT_FAILURE;
-        }
+            return EXIT_FAILURE;
+          }
 
   dutycycle = atof(argv[6]);
   if((dutycycle < 0.099999) || (dutycycle > 100.000001))
@@ -264,10 +277,18 @@ int main(int argc, char **argv)
     }
   }
 
-  buf = (double *)malloc(sf * sizeof(double));
+  buf = (double *)calloc(1, sf * sizeof(double));
   if(!buf)
   {
-    printf("Malloc error\n");
+    printf("Malloc error line %i\n", __LINE__);
+
+    return EXIT_FAILURE;
+  }
+
+  randbuf = (int *)calloc(1, sf * sizeof(int));
+  if(!randbuf)
+  {
+    printf("Malloc error line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
@@ -302,42 +323,42 @@ int main(int argc, char **argv)
 
   if(hdl<0)
   {
-    printf("error: edfopen_file_writeonly()\n");
+    printf("error: edfopen_file_writeonly() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_startdatetime(hdl, 2000, 1, 1, 0, 0, 0))
   {
-    printf("error: edf_set_startdatetime()\n");
+    printf("error: edf_set_startdatetime() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_samplefrequency(hdl, 0, sf))
   {
-    printf("error: edf_set_samplefrequency()\n");
+    printf("error: edf_set_samplefrequency() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_digital_maximum(hdl, 0, digmax))
   {
-    printf("error: edf_set_digital_maximum()\n");
+    printf("error: edf_set_digital_maximum() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_digital_minimum(hdl, 0, digmin))
   {
-    printf("error: edf_set_digital_minimum()\n");
+    printf("error: edf_set_digital_minimum() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_physical_maximum(hdl, 0, physmax))
   {
-    printf("error: edf_set_physical_maximum()\n");
+    printf("error: edf_set_physical_maximum() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
@@ -345,14 +366,14 @@ int main(int argc, char **argv)
 
   if(edf_set_physical_minimum(hdl, 0, physmin))
   {
-    printf("error: edf_set_physical_minimum()\n");
+    printf("error: edf_set_physical_minimum() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_physical_dimension(hdl, 0, physdim))
   {
-    printf("error: edf_set_physical_dimension()\n");
+    printf("error: edf_set_physical_dimension() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
@@ -373,10 +394,16 @@ int main(int argc, char **argv)
         {
           snprintf(str, 18, "triangle %.2fHz", signalfreq);
         }
+        else if(waveform == WAVE_WHITE_NOISE)
+          {
+            snprintf(str, 18, "noise %.2fHz", signalfreq);
+          }
+
+  remove_trailing_zeros(str);
 
   if(edf_set_label(hdl, 0, str))
   {
-    printf("error: edf_set_label()\n");
+    printf("error: edf_set_label() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
@@ -390,6 +417,17 @@ int main(int argc, char **argv)
   q = 1.0 / sf;
 
   w /= (sf / signalfreq);
+
+  if(waveform == WAVE_WHITE_NOISE)
+  {
+    fd = open("/dev/urandom", O_RDONLY | O_NONBLOCK);
+    if(fd < 0)
+    {
+      printf("error: open /dev/urandom line %i\n", __LINE__);
+
+      return EXIT_FAILURE;
+    }
+  }
 
   for(j=0; j<duration; j++)
   {
@@ -460,18 +498,39 @@ int main(int argc, char **argv)
                 }
             }
           }
+          else if(waveform == WAVE_WHITE_NOISE)
+            {
+              err = read(fd, randbuf, sf * sizeof(int));
+              if(err != (sf * 4))
+              {
+                printf("error: read() line %i\n", __LINE__);
+
+                return EXIT_FAILURE;
+              }
+
+              for(i=0; i<sf; i++)
+              {
+                buf[i] = (randbuf[i] % ((int)(peakamp * 100.0))) / 100.0;
+              }
+            }
 
     if(edfwrite_physical_samples(hdl, buf))
     {
-      printf("error: edfwrite_physical_samples()\n");
+      printf("error: edfwrite_physical_samples() line %i\n", __LINE__);
 
       return EXIT_FAILURE;
     }
   }
 
+  if(waveform == WAVE_WHITE_NOISE)
+  {
+    close(fd);
+  }
+
   edfclose_file(hdl);
 
   free(buf);
+  free(randbuf);
 
   return EXIT_SUCCESS;
 }
