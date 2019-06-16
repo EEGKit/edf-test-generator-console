@@ -1,4 +1,6 @@
 
+This is a commandline tool that generates a waveform stored in the European Data Format (EDF).
+
 usage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp or triangle> <dutycycle %> [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]
 
 example 1: edf_generator edf 10 1000 1 sine 50
@@ -14,3 +16,7 @@ BDF file, 10 seconds recording length, 1KHz samplerate, triangular wave of 1.5Hz
 
 example 4: edf_generator bdf 20 512 3.7 triangle 100 1000 -1000 300 uV
 BDF file, 20 seconds recording length, 512Hz samplerate, triangular wave of 3.7Hz, duty cycle 100%,
+
+example 5: edf_generator edf 60 10000 1 noise 50
+EDF file, 60 seconds recording length, 10KHz samplerate, noise
+
