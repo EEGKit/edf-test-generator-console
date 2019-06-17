@@ -46,6 +46,7 @@
 #define WAVE_RAMP          2
 #define WAVE_TRIANGLE      3
 #define WAVE_WHITE_NOISE   4
+#define WAVE_PINK_NOISE    5
 
 
 void remove_trailing_zeros(char *);
@@ -77,17 +78,19 @@ int main(int argc, char **argv)
          physmin=-1200,
          peakamp=1000,
          dutycycle=50,
-         ftmp;
+         ftmp,
+         b0, b1, b2, b3, b4, b5, b6,
+         white_noise;
 
   char physdim[32]="uV",
        str[1024]="";
 
-  const char waveforms_str[5][16]={"sine", "square", "ramp", "triangle", "noise"};
+  const char waveforms_str[6][16]={"sine", "square", "ramp", "triangle", "white-noise", "pink-noise"};
 
   if((argc != 7) && (argc != 11) && (argc != 13))
   {
     printf("\nEDF generator version: " PROGRAM_VERSION "   Author: Teunis van Beelen   License: GPLv3\n"
-           "\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp, triangle or noise> <dutycycle %%>"
+           "\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp, triangle white-noise or pink-noise> <dutycycle %%>"
            " [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]\n"
            "\nexample 1: edf_generator edf 10 1000 1 sine 50\n"
            "EDF file, 10 seconds recording length, 1KHz samplerate, sine wave of 1Hz\n"
@@ -100,8 +103,8 @@ int main(int argc, char **argv)
            "\nexample 4: edf_generator bdf 20 512 3.7 triangle 100 1000 -1000 300 uV\n"
            "BDF file, 20 seconds recording length, 512Hz samplerate, triangular wave of 3.7Hz, duty cycle 100%%,\n"
            "1000 physical maximum, -1000 physical minimum, 300uV peak amplitude\n"
-           "\nexample 5: edf_generator edf 60 10000 1 noise 50\n"
-           "EDF file, 60 seconds recording length, 10KHz samplerate, noise\n"
+           "\nexample 5: edf_generator edf 60 10000 1 white-noise 50\n"
+           "EDF file, 60 seconds recording length, 10KHz samplerate, white noise\n"
            "\n");
 
     return EXIT_FAILURE;
@@ -170,16 +173,20 @@ int main(int argc, char **argv)
         {
           waveform = WAVE_TRIANGLE;
         }
-        else if(!strcmp(argv[5], "noise"))
+        else if(!strcmp(argv[5], "white-noise"))
           {
             waveform = WAVE_WHITE_NOISE;
           }
-          else
-          {
-            printf("error: invalid waveform %s\n", argv[1]);
+          else if(!strcmp(argv[5], "pink-noise"))
+            {
+              waveform = WAVE_PINK_NOISE;
+            }
+            else
+            {
+              printf("error: invalid waveform %s\n", argv[1]);
 
-            return EXIT_FAILURE;
-          }
+              return EXIT_FAILURE;
+            }
 
   dutycycle = atof(argv[6]);
   if((dutycycle < 0.099999) || (dutycycle > 100.000001))
@@ -396,8 +403,12 @@ int main(int argc, char **argv)
         }
         else if(waveform == WAVE_WHITE_NOISE)
           {
-            snprintf(str, 18, "noise");
+            snprintf(str, 18, "white noise");
           }
+          else if(waveform == WAVE_PINK_NOISE)
+            {
+              snprintf(str, 18, "pink noise");
+            }
 
   remove_trailing_zeros(str);
 
@@ -416,9 +427,17 @@ int main(int argc, char **argv)
 
   q = 1.0 / sf;
 
+  b0 = 0;
+  b1 = 0;
+  b2 = 0;
+  b3 = 0;
+  b4 = 0;
+  b5 = 0;
+  b6 = 0;
+
   w /= (sf / signalfreq);
 
-  if(waveform == WAVE_WHITE_NOISE)
+  if((waveform == WAVE_WHITE_NOISE) || (waveform == WAVE_PINK_NOISE))
   {
     fd = open("/dev/urandom", O_RDONLY | O_NONBLOCK);
     if(fd < 0)
@@ -498,7 +517,7 @@ int main(int argc, char **argv)
                 }
             }
           }
-          else if(waveform == WAVE_WHITE_NOISE)
+          else if((waveform == WAVE_WHITE_NOISE) || (waveform == WAVE_PINK_NOISE))
             {
               err = read(fd, randbuf, sf * sizeof(int));
               if(err != (sf * 4))
@@ -508,10 +527,28 @@ int main(int argc, char **argv)
                 return EXIT_FAILURE;
               }
 
-              for(i=0; i<sf; i++)
+              if(waveform == WAVE_WHITE_NOISE)
               {
-                buf[i] = (randbuf[i] % ((int)(peakamp * 100.0))) / 100.0;
+                for(i=0; i<sf; i++)
+                {
+                  buf[i] = (randbuf[i] % ((int)(peakamp * 100.0))) / 100.0;
+                }
               }
+              else if(waveform == WAVE_PINK_NOISE)
+                {
+                  for(i=0; i<sf; i++)
+                  {
+                    white_noise = (randbuf[i] % ((int)(peakamp * 100.0))) / 600.0;
+                    b0 = 0.99886 * b0 + white_noise * 0.0555179;
+                    b1 = 0.99332 * b1 + white_noise * 0.0750759;
+                    b2 = 0.96900 * b2 + white_noise * 0.1538520;
+                    b3 = 0.86650 * b3 + white_noise * 0.3104856;
+                    b4 = 0.55000 * b4 + white_noise * 0.5329522;
+                    b5 = -0.7616 * b5 - white_noise * 0.0168980;
+                    buf[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white_noise * 0.5362;
+                    b6 = white_noise * 0.115926;
+                  }
+                }
             }
 
     if(edfwrite_physical_samples(hdl, buf))
@@ -522,7 +559,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if(waveform == WAVE_WHITE_NOISE)
+  if((waveform == WAVE_WHITE_NOISE) || (waveform == WAVE_PINK_NOISE))
   {
     close(fd);
   }
