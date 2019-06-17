@@ -396,7 +396,7 @@ int main(int argc, char **argv)
         }
         else if(waveform == WAVE_WHITE_NOISE)
           {
-            snprintf(str, 18, "noise %.2fHz", signalfreq);
+            snprintf(str, 18, "noise");
           }
 
   remove_trailing_zeros(str);
