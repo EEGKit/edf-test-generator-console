@@ -536,6 +536,12 @@ int main(int argc, char **argv)
               }
               else if(waveform == WAVE_PINK_NOISE)
                 {
+/* This is an approximation to a -10dB/decade (-3dB/octave) filter using a weighted sum
+ * of first order filters. It is accurate to within +/-0.05dB above 9.2Hz
+ * (44100Hz sampling rate). Unity gain is at Nyquist, but can be adjusted
+ * by scaling the numbers at the end of each line.
+ * http://www.firstpr.com.au/dsp/pink-noise/
+ */
                   for(i=0; i<sf; i++)
                   {
                     white_noise = (randbuf[i] % ((int)(peakamp * 100.0))) / 600.0;
