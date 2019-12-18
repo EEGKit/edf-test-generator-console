@@ -16,9 +16,9 @@ objects = main.o edflib.o
 all: edf_generator
 
 edf_generator : $(objects)
-	$(CC) $(LDLIBS) $(objects) -o edf_generator  $(LDLIBS)
+	$(CC) $(objects) -o edf_generator  $(LDLIBS)
 #  Updated GBC.  original was as below:
-#	$(CC) $(LDLIBS) $(objects) -o edf_generator  
+#	$(CC) $(LDLIBS) $(objects) -o edf_generator
 
 main.o : main.c
 	$(CC) $(CFLAGS) -c main.c -o main.o
