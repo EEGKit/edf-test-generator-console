@@ -7,7 +7,7 @@
 #
 
 CC = gcc
-CFLAGS = -O2 -Wall -Wextra -Wshadow -Wformat-nonliteral -Wformat-security -Wtype-limits -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE
+CFLAGS = -O3 -std=gnu11 -Wall -Wextra -Wshadow -Wformat-nonliteral -Wformat-security -Wtype-limits -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE
 LDFLAGS =
 LDLIBS = -lm
 

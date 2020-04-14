@@ -36,7 +36,7 @@
 
 #include "edflib.h"
 
-#define PROGRAM_VERSION    "1.01"
+#define PROGRAM_VERSION    "1.02"
 
 #define FILETYPE_EDF       0
 #define FILETYPE_BDF       1
@@ -134,7 +134,7 @@ int main(int argc, char **argv)
     }
 
   duration = atoi(argv[2]);
-  if((duration < 1) || (duration > 3600))
+  if((duration < 1) || (duration > 360000))
   {
     printf("error: invalid duration %i seconds\n", duration);
 
