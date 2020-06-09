@@ -3,7 +3,7 @@
 *
 * Author: Teunis van Beelen
 *
-* Copyright (C) 2018 - 2019 Teunis van Beelen
+* Copyright (C) 2018 - 2020 Teunis van Beelen
 *
 * Email: teuniz@protonmail.com
 *
@@ -36,7 +36,7 @@
 
 #include "edflib.h"
 
-#define PROGRAM_VERSION    "1.02"
+#define PROGRAM_VERSION    "1.03"
 
 #define FILETYPE_EDF       0
 #define FILETYPE_BDF       1
