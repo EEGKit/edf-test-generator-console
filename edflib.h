@@ -133,8 +133,10 @@ extern "C" {
  * This is not a concern anymore so the maximum datarecord size now is limited to 10MByte for EDF(+) and 15MByte for BDF(+). This helps to accommodate for higher samplingrates
  * used by modern Analog to Digital Converters.
  *
- * EDF header character encoding: The EDF specification says that only ASCII characters are allowed.
- * EDFlib will automatically convert characters with accents, umlauts, tilde, etc. to their "normal" equivalent without the accent/umlaut/tilde/etc.
+ * EDF header character encoding: The EDF specification says that only (printable) ASCII characters are allowed.
+ * When writing the header info, EDFlib will assume you are using Latin1 encoding and it will automatically convert
+ * characters with accents, umlauts, tilde, etc. to their "normal" equivalent without the accent/umlaut/tilde/etc.
+ * in order to create a valid EDF file.
  *
  * The description/name of an EDF+ annotation on the other hand, is encoded in UTF-8.
  *
@@ -427,7 +429,7 @@ int edf_set_startdatetime(int handle, int startdate_year, int startdate_month, i
                                       int starttime_hour, int starttime_minute, int starttime_second);
 
 /* Sets the startdate and starttime. */
-/* year: 1970 - 3000, month: 1 - 12, day: 1 - 31 */
+/* year: 1985 - 2084, month: 1 - 12, day: 1 - 31 */
 /* hour: 0 - 23, minute: 0 - 59, second: 0 - 59 */
 /* If not called, the library will use the system date and time at runtime */
 /* Returns 0 on success, otherwise -1 */

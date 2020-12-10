@@ -2504,9 +2504,7 @@ static struct edfhdrblock * edflib_check_edf_file(FILE *inputfile, int *edf_erro
         return NULL;
       }
 
-      edfhdr->startdate_year = edflib_atof_nonlocalized(scratchpad2 + 7);
-
-      if(edfhdr->startdate_year<1970)
+      if(edfhdr->startdate_year != edflib_atof_nonlocalized(scratchpad2 + 7))
       {
         *edf_error = EDFLIB_FILE_CONTAINS_FORMAT_ERRORS;
         free(edf_hdr);
@@ -6432,7 +6430,7 @@ int edf_set_startdatetime(int handle, int startdate_year, int startdate_month, i
     return -1;
   }
 
-  if((startdate_year<1970) || (startdate_year>3000) ||
+  if((startdate_year<1985) || (startdate_year>2084) ||
      (startdate_month<1)   || (startdate_month>12)  ||
      (startdate_day<1)     || (startdate_day>31)    ||
      (starttime_hour<0)    || (starttime_hour>23)   ||
@@ -6513,7 +6511,7 @@ int edfwrite_annotation_utf8(int handle, long long onset, long long duration, co
       break;
     }
 
-    if(list_annot->annotation[i] < 32)
+    if(((unsigned char *)(list_annot->annotation))[i] < 32)
     {
       list_annot->annotation[i] = '.';
     }
@@ -6736,7 +6734,7 @@ static int edflib_fprint_int_number_nonlocalized(FILE *file, int q, int minimum,
 
     j++;
 
-    q = -q;
+    base = -base;
   }
   else
   {
@@ -6808,7 +6806,7 @@ static int edflib_fprint_ll_number_nonlocalized(FILE *file, long long q, int min
 
     j++;
 
-    q = -q;
+    base = -base;
   }
   else
   {
@@ -6948,7 +6946,7 @@ static int edflib_snprint_ll_number_nonlocalized(char *dest, long long q, int mi
   {
     dest[j++] = '-';
 
-    q = -q;
+    base = -base;
   }
   else
   {
@@ -7029,7 +7027,7 @@ static int edflib_snprint_number_nonlocalized(char *dest, double val, int sz)
 
     if(q < 0)
     {
-      q = -q;
+      base = -base;
     }
   }
 
@@ -7083,7 +7081,7 @@ static int edflib_snprint_number_nonlocalized(char *dest, double val, int sz)
 
   if(q < 0)
   {
-    q = -q;
+    base = -base;
   }
 
   if(!q)
@@ -7298,10 +7296,10 @@ static int edflib_atoi_nonlocalized(const char *str)
 
     value *= 10;
 
-    value += (str[i] - '0');
+    value += ((str[i] - '0') * sign);
   }
 
-  return value * sign;
+  return value;
 }
 
 
