@@ -3,7 +3,7 @@ This is a commandline tool that generates a waveform stored in the European Data
 
 Website: https://www.teuniz.net/EDF-test-file-generator/
 
-usage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp, triangle, white-noise or pink-noise> <dutycycle %> [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]
+usage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp, triangle, white-noise or pink-noise> <dutycycle %> [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min> [DC-offset]]]
 
 example 1: edf_generator edf 10 1000 1 sine 50
 EDF file, 10 seconds recording length, 1KHz samplerate, sine wave of 1Hz

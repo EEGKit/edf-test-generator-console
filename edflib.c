@@ -1,7 +1,7 @@
 /*
 *****************************************************************************
 *
-* Copyright (c) 2009 - 2020 Teunis van Beelen
+* Copyright (c) 2009 - 2021 Teunis van Beelen
 * All rights reserved.
 *
 * Email: teuniz@protonmail.com
@@ -42,7 +42,7 @@
 #include "edflib.h"
 
 
-#define EDFLIB_VERSION  (118)
+#define EDFLIB_VERSION  (119)
 #define EDFLIB_MAXFILES  (64)
 
 

@@ -3,7 +3,7 @@
 *
 * Author: Teunis van Beelen
 *
-* Copyright (C) 2018 - 2020 Teunis van Beelen
+* Copyright (C) 2018 - 2021 Teunis van Beelen
 *
 * Email: teuniz@protonmail.com
 *
@@ -36,7 +36,7 @@
 
 #include "edflib.h"
 
-#define PROGRAM_VERSION    "1.03"
+#define PROGRAM_VERSION    "1.04"
 
 #define FILETYPE_EDF       0
 #define FILETYPE_BDF       1
@@ -80,18 +80,19 @@ int main(int argc, char **argv)
          dutycycle=50,
          ftmp,
          b0, b1, b2, b3, b4, b5, b6,
-         white_noise;
+         white_noise,
+         dc_offset=0;
 
   char physdim[32]="uV",
        str[1024]="";
 
   const char waveforms_str[6][16]={"sine", "square", "ramp", "triangle", "white-noise", "pink-noise"};
 
-  if((argc != 7) && (argc != 11) && (argc != 13))
+  if((argc != 7) && (argc != 11) && (argc != 13) && (argc != 14))
   {
     printf("\nEDF generator version: " PROGRAM_VERSION "   Author: Teunis van Beelen   License: GPLv3\n"
            "\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp, triangle white-noise or pink-noise> <dutycycle %%>"
-           " [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min>]]\n"
+           " [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min> [DC-offset]]]\n"
            "\nexample 1: edf_generator edf 10 1000 1 sine 50\n"
            "EDF file, 10 seconds recording length, 1KHz samplerate, sine wave of 1Hz\n"
            "\nexample 2: edf_generator edf 30 113 3.2 square 50 3200 -3200 100 uV\n"
@@ -196,7 +197,12 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if((argc == 11) || (argc == 13))
+  if(argc == 14)
+  {
+    dc_offset = atof(argv[13]);
+  }
+
+  if((argc == 11) || (argc == 13) || (argc == 14))
   {
     physmax = atof(argv[7]);
 
@@ -229,15 +235,15 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
     }
 
-    if((physmax < (peakamp * 1.05)) || (physmin > (peakamp * -1.05)))
+    if((physmax < ((peakamp * 1.05) + dc_offset)) || (physmin > ((peakamp * -1.05) + dc_offset)))
     {
-      printf("error: physical maximum must be higher than peak amplitude * 1.05 and physical minimum must be more lower than peak amplitude * -1.05\n");
+      printf("error: physical maximum must be higher than peak amplitude * 1.05 + DC-offset and physical minimum must be more lower than peak amplitude * -1.05 + DC-offset\n");
 
       return EXIT_FAILURE;
     }
   }
 
-  if(argc == 13)
+  if((argc == 13) || (argc == 14))
   {
     digmax = atoi(argv[11]);
 
@@ -456,7 +462,7 @@ int main(int argc, char **argv)
       {
         sine_1 += w;
 
-        buf[i] = sin(sine_1) * peakamp;
+        buf[i] = (sin(sine_1) * peakamp) + dc_offset;
       }
     }
     else if(waveform == WAVE_SQUARE)
@@ -475,6 +481,7 @@ int main(int argc, char **argv)
           {
             buf[i] = -peakamp;
           }
+          buf[i] += dc_offset;
         }
       }
       else if(waveform == WAVE_RAMP)
@@ -493,6 +500,7 @@ int main(int argc, char **argv)
             {
               buf[i] = -peakamp;
             }
+            buf[i] += dc_offset;
           }
         }
         else if(waveform == WAVE_TRIANGLE)
@@ -506,6 +514,7 @@ int main(int argc, char **argv)
               if((ftmp * signalfreq) < (dutycycle / 200.0))
               {
                 buf[i] = peakamp * (400.0 / dutycycle) * ftmp * signalfreq - peakamp;
+                buf[i] += dc_offset;
               }
               else if((ftmp * signalfreq) < (dutycycle / 100.0))
                 {
@@ -515,6 +524,7 @@ int main(int argc, char **argv)
                 {
                   buf[i] = -peakamp;
                 }
+                buf[i] += dc_offset;
             }
           }
           else if((waveform == WAVE_WHITE_NOISE) || (waveform == WAVE_PINK_NOISE))
@@ -532,6 +542,7 @@ int main(int argc, char **argv)
                 for(i=0; i<sf; i++)
                 {
                   buf[i] = (randbuf[i] % ((int)(peakamp * 100.0))) / 100.0;
+                  buf[i] += dc_offset;
                 }
               }
               else if(waveform == WAVE_PINK_NOISE)
@@ -552,6 +563,7 @@ int main(int argc, char **argv)
                     b4 = 0.55000 * b4 + white_noise * 0.5329522;
                     b5 = -0.7616 * b5 - white_noise * 0.0168980;
                     buf[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white_noise * 0.5362;
+                    buf[i] += dc_offset;
                     b6 = white_noise * 0.115926;
                   }
                 }
