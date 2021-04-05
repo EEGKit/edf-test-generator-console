@@ -29,14 +29,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <locale.h>
 #include <math.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <stdint.h>
+#include <float.h>
+#include <getopt.h>
+#include <errno.h>
 
 #include "edflib.h"
+#include "utils.h"
 
-#define PROGRAM_VERSION    "1.04"
+#define PROGRAM_NAME       "edfgenerator"
+#define PROGRAM_VERSION    "1.05"
 
 #define FILETYPE_EDF       0
 #define FILETYPE_BDF       1
@@ -49,23 +56,25 @@
 #define WAVE_PINK_NOISE    5
 
 
-void remove_trailing_zeros(char *);
-
 
 
 int main(int argc, char **argv)
 {
   int i, j,
       err,
+      option_index=0,
+      c=0,
       fd=-1,
       hdl=-1,
       filetype=0,
-      duration=1,
-      sf=1,
+      duration=30,
+      sf=500,
       digmax=0,
       digmin=0,
-      waveform,
-      *randbuf=NULL;
+      waveform=0,
+      *randbuf=NULL,
+      digmax_set=0,
+      digmin_set=0;
 
   double *buf=NULL,
          w=1,
@@ -73,7 +82,7 @@ int main(int argc, char **argv)
          sine_1=0,
          square_1=0,
          triangle_1=0,
-         signalfreq=1,
+         signalfreq=10,
          physmax=1200,
          physmin=-1200,
          peakamp=1000,
@@ -88,225 +97,292 @@ int main(int argc, char **argv)
 
   const char waveforms_str[6][16]={"sine", "square", "ramp", "triangle", "white-noise", "pink-noise"};
 
-  if((argc != 7) && (argc != 11) && (argc != 13) && (argc != 14))
-  {
-    printf("\nEDF generator version: " PROGRAM_VERSION "   Author: Teunis van Beelen   License: GPLv3\n"
-           "\nusage: edf_generator <filetype edf or bdf> <duration in seconds> <sample frequency> <signal frequency Hz> <waveform sine, square, ramp, triangle white-noise or pink-noise> <dutycycle %%>"
-           " [<physical max> <physical min> <peak amplitude> <physical dimension> [<digital max> <digital min> [DC-offset]]]\n"
-           "\nexample 1: edf_generator edf 10 1000 1 sine 50\n"
-           "EDF file, 10 seconds recording length, 1KHz samplerate, sine wave of 1Hz\n"
-           "\nexample 2: edf_generator edf 30 113 3.2 square 50 3200 -3200 100 uV\n"
-           "EDF file, 30 seconds recording length, 113Hz samplerate, square wave of 3.2Hz, duty cycle 50%%,\n"
-           "3200 physical maximum, -3200 physical minimum, 100uV peak amplitude\n"
-           "\nexample 3: edf_generator bdf 10 1000 1.5 ramp 10.5 1000 -1000 300 mV 1048575 -1048576\n"
-           "BDF file, 10 seconds recording length, 1KHz samplerate, triangular wave of 1.5Hz, duty cycle 10.5%%,\n"
-           "1000 physical maximum, -1000 physical minimum, 300mV peak amplitude, 1048575 digital maximum, -1048576 digital minimum\n"
-           "\nexample 4: edf_generator bdf 20 512 3.7 triangle 100 1000 -1000 300 uV\n"
-           "BDF file, 20 seconds recording length, 512Hz samplerate, triangular wave of 3.7Hz, duty cycle 100%%,\n"
-           "1000 physical maximum, -1000 physical minimum, 300uV peak amplitude\n"
-           "\nexample 5: edf_generator edf 60 10000 1 white-noise 50\n"
-           "EDF file, 60 seconds recording length, 10KHz samplerate, white noise\n"
-           "\n");
+  setlocale(LC_ALL, "C");
 
+  setlinebuf(stdout);
+  setlinebuf(stderr);
+
+  struct option long_options[] = {
+    {"type", required_argument, 0, 0},
+    {"len", required_argument, 0, 0},
+    {"rate", required_argument, 0, 0},
+    {"freq", required_argument, 0, 0},
+    {"wave", required_argument, 0, 0},
+    {"dcycle", required_argument, 0, 0},
+    {"physmax", required_argument, 0, 0},
+    {"physmin", required_argument, 0, 0},
+    {"amp", required_argument, 0, 0},
+    {"unit", required_argument, 0, 0},
+    {"digmax", required_argument, 0, 0},
+    {"digmin", required_argument, 0, 0},
+    {"offset", required_argument, 0, 0},
+    {"help", no_argument, 0, 0},
+    {0, 0, 0, 0}
+  };
+
+  while(1)
+  {
+    c = getopt_long_only(argc, argv, "", long_options, &option_index);
+
+    if(c == -1)  break;
+
+    if(c == 0)
+    {
+      if(option_index < 13)
+      {
+        if(optarg == NULL)
+        {
+          fprintf(stderr, "missing value for option %s\n", long_options[option_index].name);
+          return EXIT_FAILURE;
+        }
+      }
+
+      if(option_index == 0)
+      {
+        if(!strcmp(optarg, "edf"))
+        {
+          filetype = FILETYPE_EDF;
+        }
+        else if(!strcmp(optarg, "bdf"))
+          {
+            filetype = FILETYPE_BDF;
+          }
+          else
+          {
+            fprintf(stderr, "unrecognized value for option %s\n", long_options[option_index].name);
+            return EXIT_FAILURE;
+          }
+      }
+
+      if(option_index == 1)
+      {
+        duration = atoi(optarg);
+        if(duration < 1)
+        {
+          fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
+          return EXIT_FAILURE;
+        }
+      }
+
+      if(option_index == 2)
+      {
+        sf = atoi(optarg);
+        if(sf < 1)
+        {
+          fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
+          return EXIT_FAILURE;
+        }
+      }
+
+      if(option_index == 3)
+      {
+        signalfreq = atof(optarg);
+        if((signalfreq < 9.99999e-2) || (signalfreq > (sf / 4.0 + 1e-6)))
+        {
+          fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
+          return EXIT_FAILURE;
+        }
+      }
+
+      if(option_index == 4)
+      {
+        for(i=0; i<6; i++)
+        {
+          if(!strcmp(optarg, waveforms_str[i]))
+          {
+            waveform = i;
+            break;
+          }
+        }
+        if(i==6)
+        {
+          fprintf(stderr, "unrecognized value for option %s\n", long_options[option_index].name);
+          return EXIT_FAILURE;
+        }
+      }
+
+      if(option_index == 5)
+      {
+        dutycycle = atof(optarg);
+        if((dutycycle < 0.099999) || (dutycycle > 100.000001))
+        {
+          fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
+          return EXIT_FAILURE;
+        }
+      }
+
+      if(option_index == 6)
+      {
+        physmax = atof(optarg);
+      }
+
+      if(option_index == 7)
+      {
+        physmin = atof(optarg);
+      }
+
+      if(option_index == 8)
+      {
+        peakamp = atof(optarg);
+      }
+
+      if(option_index == 9)
+      {
+        strlcpy(physdim, optarg, 16);
+      }
+
+      if(option_index == 10)
+      {
+        digmax = atoi(optarg);
+        digmax_set = 1;
+      }
+
+      if(option_index == 11)
+      {
+        digmin = atoi(optarg);
+        digmin_set = 1;
+      }
+
+      if(option_index == 12)
+      {
+        dc_offset = atof(optarg);
+      }
+
+      if(option_index == 13)
+      {
+        fprintf(stdout, "\n EDF generator version " PROGRAM_VERSION
+          " Copyright (c) 2020 - 2021 Teunis van Beelen   email: teuniz@protonmail.com\n"
+          "\n Usage: " PROGRAM_NAME " [OPTION]...\n"
+          "\n options:\n"
+          "\n --type==<edf|bdf> default: edf\n"
+          "\n --len==<file duration in seconds> default: 30\n"
+          "\n --rate==<samplerate in herz> default: 500\n"
+          "\n --freq==<signal frequency in herz> default: 10\n"
+          "\n --wave==<sine | square | ramp | triangle | white-noise | pink-noise> default: sine\n"
+          "\n --dcycle==<dutycycle: 0.1-100%%> default: 50\n"
+          "\n --physmax==<physical maximum> default: 1200\n"
+          "\n --physmin==<physical minimum> default: -1200\n"
+          "\n --amp==<peak amplitude> default: 1000\n"
+          "\n --unit==<physical dimension> default: uV\n"
+          "\n --digmax==<digital maximum> default: 32767 (EDF) or 8388607 (BDF)\n"
+          "\n --digmin==<digital minimum> default: -32768 (EDF) or -8388608 (BDF)\n"
+          "\n --offset==<physical dc-offset> default: 0\n"
+          "\n --help\n\n"
+        );
+        return EXIT_SUCCESS;
+      }
+    }
+  }
+
+  if(optind < argc)
+  {
+    fprintf(stderr, "unrecognized argument(s):");
+    while(optind < argc)
+    {
+      fprintf(stderr, " %s", argv[optind++]);
+    }
+    fprintf(stderr, "\n--help for help\n");
     return EXIT_FAILURE;
   }
 
-  if(!strcmp(argv[1], "edf"))
+  if(!digmax_set)
   {
-    filetype = FILETYPE_EDF;
-
-    digmax = 32767;
-
-    digmin = -32768;
-  }
-  else if(!strcmp(argv[1], "bdf"))
+    if(filetype == FILETYPE_EDF)
     {
-      filetype = FILETYPE_BDF;
-
-      digmax = 8388607;
-
-      digmin = -8388608;
+      digmax = 32767;
     }
     else
     {
-      printf("error: invalid filetype %s\n", argv[1]);
+      digmax = 8388607;
+    }
+  }
 
+  if(!digmin_set)
+  {
+    if(filetype == FILETYPE_EDF)
+    {
+      digmin = -32768;
+    }
+    else
+    {
+      digmin = -8388608;
+    }
+  }
+
+  if(physmax > 9999999.5)
+  {
+    fprintf(stderr, "error: physical maximum must be <= 9999999\n");
+    return EXIT_FAILURE;
+  }
+
+  if(physmin < -9999999.5)
+  {
+    fprintf(stderr, "error: physical minimum must be >= -9999999\n");
+    return EXIT_FAILURE;
+  }
+
+  if(peakamp < 0.9999)
+  {
+    fprintf(stderr, "error: peak amplitude must be >= 1\n");
+    return EXIT_FAILURE;
+  }
+
+  if((physmax < ((peakamp * 1.05) + dc_offset)) || (physmin > ((peakamp * -1.05) + dc_offset)))
+  {
+    fprintf(stderr, "error: physical maximum must be higher than peak amplitude * 1.05 + DC-offset and physical minimum must be more lower than peak amplitude * -1.05 + DC-offset\n");
+    return EXIT_FAILURE;
+  }
+
+  if(filetype == FILETYPE_BDF)
+  {
+    if(digmax > 8388607)
+    {
+      fprintf(stderr, "error: digital maximum must be <= 8388607\n");
       return EXIT_FAILURE;
     }
 
-  duration = atoi(argv[2]);
-  if((duration < 1) || (duration > 360000))
-  {
-    printf("error: invalid duration %i seconds\n", duration);
-
-    return EXIT_FAILURE;
-  }
-
-  sf = atoi(argv[3]);
-  if((sf < 4) || (sf > 200000))
-  {
-    printf("error: invalid sample frequency %i Hz\n", sf);
-
-    return EXIT_FAILURE;
-  }
-
-  signalfreq = atof(argv[4]);
-  if((signalfreq < 9.99999e-2) || (signalfreq > (sf / 4.0 + 1e-6)))
-  {
-    printf("error: invalid signal frequency %f Hz\n", signalfreq);
-
-    return EXIT_FAILURE;
-  }
-
-  if(!strcmp(argv[5], "sine"))
-  {
-    waveform = WAVE_SINE;
-  }
-  else if(!strcmp(argv[5], "square"))
+    if(digmin < -8388608)
     {
-      waveform = WAVE_SQUARE;
+      fprintf(stderr, "error: digital minimum must be >= -8388608\n");
+      return EXIT_FAILURE;
     }
-    else if(!strcmp(argv[5], "ramp"))
+  }
+  else if(filetype == FILETYPE_EDF)
+    {
+      if(digmax > 32767)
       {
-        waveform = WAVE_RAMP;
-      }
-      else if(!strcmp(argv[5], "triangle"))
-        {
-          waveform = WAVE_TRIANGLE;
-        }
-        else if(!strcmp(argv[5], "white-noise"))
-          {
-            waveform = WAVE_WHITE_NOISE;
-          }
-          else if(!strcmp(argv[5], "pink-noise"))
-            {
-              waveform = WAVE_PINK_NOISE;
-            }
-            else
-            {
-              printf("error: invalid waveform %s\n", argv[1]);
-
-              return EXIT_FAILURE;
-            }
-
-  dutycycle = atof(argv[6]);
-  if((dutycycle < 0.099999) || (dutycycle > 100.000001))
-  {
-    printf("error: invalid duty cycle %f %%\n", dutycycle);
-
-    return EXIT_FAILURE;
-  }
-
-  if(argc == 14)
-  {
-    dc_offset = atof(argv[13]);
-  }
-
-  if((argc == 11) || (argc == 13) || (argc == 14))
-  {
-    physmax = atof(argv[7]);
-
-    physmin = atof(argv[8]);
-
-    peakamp = atof(argv[9]);
-
-    strncpy(physdim, argv[10], 16);
-
-    physdim[16] = 0;
-
-    if(physmax > 9999999.5)
-    {
-      printf("error: physical maximum must be <= 9999999\n");
-
-      return EXIT_FAILURE;
-    }
-
-    if(physmin < -9999999.5)
-    {
-      printf("error: physical minimum must be >= -9999999\n");
-
-      return EXIT_FAILURE;
-    }
-
-    if(peakamp < 0.9999)
-    {
-      printf("error: peak amplitude must be >= 1\n");
-
-      return EXIT_FAILURE;
-    }
-
-    if((physmax < ((peakamp * 1.05) + dc_offset)) || (physmin > ((peakamp * -1.05) + dc_offset)))
-    {
-      printf("error: physical maximum must be higher than peak amplitude * 1.05 + DC-offset and physical minimum must be more lower than peak amplitude * -1.05 + DC-offset\n");
-
-      return EXIT_FAILURE;
-    }
-  }
-
-  if((argc == 13) || (argc == 14))
-  {
-    digmax = atoi(argv[11]);
-
-    digmin = atoi(argv[12]);
-
-    if(filetype == FILETYPE_BDF)
-    {
-      if(digmax > 8388607)
-      {
-        printf("error: digital max must be <= 8388607\n");
-
+        fprintf(stderr, "error: digital maximum must be <= 32767\n");
         return EXIT_FAILURE;
       }
 
-      if(digmin < -8388608)
+      if(digmin < -32768)
       {
-        printf("error: digital min must be >= -8388608\n");
-
+        fprintf(stderr, "error: digital minimum must be >= -32768\n");
         return EXIT_FAILURE;
       }
     }
-    else if(filetype == FILETYPE_EDF)
-      {
-        if(digmax > 32767)
-        {
-          printf("error: digital max must be <= 32767\n");
-
-          return EXIT_FAILURE;
-        }
-
-        if(digmin < -32768)
-        {
-          printf("error: digital min must be >= -32768\n");
-
-          return EXIT_FAILURE;
-        }
-      }
 
     if(digmin >= digmax)
     {
-      printf("error: digital min must be less than digital max\n");
-
+      fprintf(stderr, "error: digital minimum must be less than digital maximum\n");
       return EXIT_FAILURE;
     }
-  }
 
   buf = (double *)calloc(1, sf * sizeof(double));
-  if(!buf)
+  if(buf==NULL)
   {
-    printf("Malloc error line %i\n", __LINE__);
-
+    fprintf(stderr, "Malloc error line %i\n", __LINE__);
     return EXIT_FAILURE;
   }
 
   randbuf = (int *)calloc(1, sf * sizeof(int));
-  if(!randbuf)
+  if(randbuf==NULL)
   {
-    printf("Malloc error line %i\n", __LINE__);
-
+    fprintf(stderr, "Malloc error line %i\n", __LINE__);
     return EXIT_FAILURE;
   }
 
-  sprintf(str, "edf_generator_%iHz_%s_%f", sf, waveforms_str[waveform], signalfreq);
+  sprintf(str, "edfgenerator_%iHz_%s_%f", sf, waveforms_str[waveform], signalfreq);
 
   remove_trailing_zeros(str);
 
@@ -336,42 +412,42 @@ int main(int argc, char **argv)
 
   if(hdl<0)
   {
-    printf("error: edfopen_file_writeonly() line %i\n", __LINE__);
+    fprintf(stderr, "error: edfopen_file_writeonly() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_startdatetime(hdl, 2000, 1, 1, 0, 0, 0))
   {
-    printf("error: edf_set_startdatetime() line %i\n", __LINE__);
+    fprintf(stderr, "error: edf_set_startdatetime() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_samplefrequency(hdl, 0, sf))
   {
-    printf("error: edf_set_samplefrequency() line %i\n", __LINE__);
+    fprintf(stderr, "error: edf_set_samplefrequency() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_digital_maximum(hdl, 0, digmax))
   {
-    printf("error: edf_set_digital_maximum() line %i\n", __LINE__);
+    fprintf(stderr, "error: edf_set_digital_maximum() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_digital_minimum(hdl, 0, digmin))
   {
-    printf("error: edf_set_digital_minimum() line %i\n", __LINE__);
+    fprintf(stderr, "error: edf_set_digital_minimum() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_physical_maximum(hdl, 0, physmax))
   {
-    printf("error: edf_set_physical_maximum() line %i\n", __LINE__);
+    fprintf(stderr, "error: edf_set_physical_maximum() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
@@ -379,14 +455,14 @@ int main(int argc, char **argv)
 
   if(edf_set_physical_minimum(hdl, 0, physmin))
   {
-    printf("error: edf_set_physical_minimum() line %i\n", __LINE__);
+    fprintf(stderr, "error: edf_set_physical_minimum() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
 
   if(edf_set_physical_dimension(hdl, 0, physdim))
   {
-    printf("error: edf_set_physical_dimension() line %i\n", __LINE__);
+    fprintf(stderr, "error: edf_set_physical_dimension() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
@@ -420,7 +496,7 @@ int main(int argc, char **argv)
 
   if(edf_set_label(hdl, 0, str))
   {
-    printf("error: edf_set_label() line %i\n", __LINE__);
+    fprintf(stderr, "error: edf_set_label() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
   }
@@ -448,7 +524,7 @@ int main(int argc, char **argv)
     fd = open("/dev/urandom", O_RDONLY | O_NONBLOCK);
     if(fd < 0)
     {
-      printf("error: open /dev/urandom line %i\n", __LINE__);
+      fprintf(stderr, "error: open /dev/urandom line %i\n", __LINE__);
 
       return EXIT_FAILURE;
     }
@@ -532,7 +608,7 @@ int main(int argc, char **argv)
               err = read(fd, randbuf, sf * sizeof(int));
               if(err != (sf * 4))
               {
-                printf("error: read() line %i\n", __LINE__);
+                fprintf(stderr, "error: read() line %i\n", __LINE__);
 
                 return EXIT_FAILURE;
               }
@@ -571,7 +647,7 @@ int main(int argc, char **argv)
 
     if(edfwrite_physical_samples(hdl, buf))
     {
-      printf("error: edfwrite_physical_samples() line %i\n", __LINE__);
+      fprintf(stderr, "error: edfwrite_physical_samples() line %i\n", __LINE__);
 
       return EXIT_FAILURE;
     }
@@ -592,98 +668,6 @@ int main(int argc, char **argv)
 
 
 
-void remove_trailing_zeros(char *str)
-{
-  int i, j,
-      len,
-      numberfound,
-      dotfound,
-      decimalzerofound,
-      trailingzerofound=1;
-
-  while(trailingzerofound)
-  {
-    numberfound = 0;
-    dotfound = 0;
-    decimalzerofound = 0;
-    trailingzerofound = 0;
-
-    len = strlen(str);
-
-    for(i=0; i<len; i++)
-    {
-      if((str[i] < '0') || (str[i] > '9'))
-      {
-        if(decimalzerofound)
-        {
-          if(str[i-decimalzerofound-1] == '.')
-          {
-            decimalzerofound++;
-          }
-
-          for(j=i; j<(len+1); j++)
-          {
-            str[j-decimalzerofound] = str[j];
-          }
-
-          trailingzerofound = 1;
-
-          break;
-        }
-
-        if(str[i] != '.')
-        {
-          numberfound = 0;
-          dotfound = 0;
-          decimalzerofound = 0;
-        }
-      }
-      else
-      {
-        numberfound = 1;
-
-        if(str[i] > '0')
-        {
-          decimalzerofound = 0;
-        }
-      }
-
-      if((str[i] == '.') && numberfound)
-      {
-        dotfound = 1;
-      }
-
-      if((str[i] == '0') && dotfound)
-      {
-        decimalzerofound++;
-      }
-    }
-  }
-
-  if(decimalzerofound)
-  {
-    if(str[i-decimalzerofound-1] == '.')
-    {
-      decimalzerofound++;
-    }
-
-    for(j=i; j<(len+1); j++)
-    {
-      str[j-decimalzerofound] = str[j];
-    }
-  }
-
-  if(len > 1)
-  {
-    if(!((str[len - 2] < '0') || (str[i] > '9')))
-    {
-       if(str[len - 1] == '.')
-       {
-         str[len - 1] = 0;
-       }
-    }
-  }
-}
 
 
 
