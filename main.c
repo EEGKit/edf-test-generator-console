@@ -43,17 +43,17 @@
 #include "utils.h"
 
 #define PROGRAM_NAME       "edfgenerator"
-#define PROGRAM_VERSION    "1.05"
+#define PROGRAM_VERSION    "1.06"
 
-#define FILETYPE_EDF       0
-#define FILETYPE_BDF       1
+#define FILETYPE_EDF       (0)
+#define FILETYPE_BDF       (1)
 
-#define WAVE_SINE          0
-#define WAVE_SQUARE        1
-#define WAVE_RAMP          2
-#define WAVE_TRIANGLE      3
-#define WAVE_WHITE_NOISE   4
-#define WAVE_PINK_NOISE    5
+#define WAVE_SINE          (0)
+#define WAVE_SQUARE        (1)
+#define WAVE_RAMP          (2)
+#define WAVE_TRIANGLE      (3)
+#define WAVE_WHITE_NOISE   (4)
+#define WAVE_PINK_NOISE    (5)
 
 
 
@@ -74,7 +74,10 @@ int main(int argc, char **argv)
       waveform=0,
       *randbuf=NULL,
       digmax_set=0,
-      digmin_set=0;
+      digmin_set=0,
+      datrecs=0,
+      datrecs_set=0,
+      datrecduration_set=0;
 
   double *buf=NULL,
          w=1,
@@ -90,7 +93,8 @@ int main(int argc, char **argv)
          ftmp,
          b0, b1, b2, b3, b4, b5, b6,
          white_noise,
-         dc_offset=0;
+         dc_offset=0,
+         datrecduration=1;
 
   char physdim[32]="uV",
        str[1024]="";
@@ -116,6 +120,8 @@ int main(int argc, char **argv)
     {"digmax", required_argument, 0, 0},
     {"digmin", required_argument, 0, 0},
     {"offset", required_argument, 0, 0},
+    {"datrecs", required_argument, 0, 0},
+    {"datrec-duration", required_argument, 0, 0},
     {"help", no_argument, 0, 0},
     {0, 0, 0, 0}
   };
@@ -250,6 +256,28 @@ int main(int argc, char **argv)
 
       if(option_index == 13)
       {
+        datrecs = atoi(optarg);
+        if(datrecs < 1)
+        {
+          fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
+          return EXIT_FAILURE;
+        }
+        datrecs_set = 1;
+      }
+
+      if(option_index == 14)
+      {
+        datrecduration = atof(optarg);
+        if((datrecduration < 0.001) || (datrecduration > 60))
+        {
+          fprintf(stderr, "illegal value for option %s, must be in the range 0.001 to 60\n", long_options[option_index].name);
+          return EXIT_FAILURE;
+        }
+        datrecduration_set = 1;
+      }
+
+      if(option_index == 15)
+      {
         fprintf(stdout, "\n EDF generator version " PROGRAM_VERSION
           " Copyright (c) 2020 - 2021 Teunis van Beelen   email: teuniz@protonmail.com\n"
           "\n Usage: " PROGRAM_NAME " [OPTION]...\n"
@@ -267,6 +295,9 @@ int main(int argc, char **argv)
           "\n --digmax=digital maximum default: 32767 (EDF) or 8388607 (BDF)\n"
           "\n --digmin=digital minimum default: -32768 (EDF) or -8388608 (BDF)\n"
           "\n --offset=physical dc-offset default: 0\n"
+          "\n --datrecs=number of datarecords that will be written into the file, has precedence over --len.\n"
+          "\n --datrec-duration=duration of a datarecord in seconds default: 1\n"
+          "                   effective samplerate and signal frequency will be inversely proportional to the datarecord duration"
           "\n --help\n\n"
         );
         return EXIT_SUCCESS;
@@ -368,6 +399,20 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
     }
 
+  if(datrecduration_set)
+  {
+    duration = (duration / datrecduration) + 0.5;
+    if(duration < 1)
+    {
+      duration = 1;
+    }
+
+    if(!datrecs_set)
+    {
+      datrecs = duration;
+    }
+  }
+
   buf = (double *)calloc(1, sf * sizeof(double));
   if(buf==NULL)
   {
@@ -382,10 +427,10 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  sprintf(str, "edfgenerator_%iHz_%s_%f", sf, waveforms_str[waveform], signalfreq);
-
+  sprintf(str, "edfgenerator_%f", sf / datrecduration);
   remove_trailing_zeros(str);
-
+  sprintf(str + strlen(str), "Hz_%s_%f", waveforms_str[waveform], signalfreq / datrecduration);
+  remove_trailing_zeros(str);
   strcat(str, "Hz");
 
   if(waveform)
@@ -415,6 +460,16 @@ int main(int argc, char **argv)
     fprintf(stderr, "error: edfopen_file_writeonly() line %i\n", __LINE__);
 
     return EXIT_FAILURE;
+  }
+
+  if(datrecduration_set)
+  {
+    if(edf_set_datarecord_duration(hdl, nearbyint(datrecduration * 100000)))
+    {
+      fprintf(stderr, "error: edf_set_datarecord_duration() line %i\n", __LINE__);
+
+      return EXIT_FAILURE;
+    }
   }
 
   if(edf_set_startdatetime(hdl, 2000, 1, 1, 0, 0, 0))
@@ -469,19 +524,19 @@ int main(int argc, char **argv)
 
   if(waveform == WAVE_SINE)
   {
-    snprintf(str, 18, "sine %.2fHz", signalfreq);
+    snprintf(str, 18, "sine %.2fHz", signalfreq / datrecduration);
   }
   else if(waveform == WAVE_SQUARE)
     {
-      snprintf(str, 18, "square %.2fHz", signalfreq);
+      snprintf(str, 18, "square %.2fHz", signalfreq / datrecduration);
     }
     else if(waveform == WAVE_RAMP)
       {
-        snprintf(str, 18, "ramp %.2fHz", signalfreq);
+        snprintf(str, 18, "ramp %.2fHz", signalfreq / datrecduration);
       }
       else if(waveform == WAVE_TRIANGLE)
         {
-          snprintf(str, 18, "triangle %.2fHz", signalfreq);
+          snprintf(str, 18, "triangle %.2fHz", signalfreq / datrecduration);
         }
         else if(waveform == WAVE_WHITE_NOISE)
           {
@@ -530,7 +585,7 @@ int main(int argc, char **argv)
     }
   }
 
-  for(j=0; j<duration; j++)
+  for(j=0; j<datrecs; j++)
   {
     if(waveform == WAVE_SINE)
     {
