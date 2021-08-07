@@ -1,0 +1,13 @@
+# Lines starting with '#' are considered comments.
+# ignore the following files:
+#
+obj/*
+#
+*.edf
+#
+*.bdf
+#
+edfgenerator
+#
+!obj/placeholder.txt
+#
