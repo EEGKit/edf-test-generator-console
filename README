@@ -9,31 +9,31 @@ Website: https://www.teuniz.net/EDF-test-file-generator/
 
  options:
 
- --type==<edf|bdf> default: edf
+ --type=edf|bdf default: edf
 
- --len==<file duration in seconds> default: 30
+ --len=file duration in seconds default: 30
 
- --rate==<samplerate in herz> default: 500
+ --rate=samplerate in herz default: 500
 
- --freq==<signal frequency in herz> default: 10
+ --freq=signal frequency in herz default: 10
 
- --wave==<sine | square | ramp | triangle | white-noise | pink-noise> default: sine
+ --wave=sine | square | ramp | triangle | white-noise | pink-noise default: sine
 
- --dcycle==<dutycycle: 0.1-100%> default: 50
+ --dcycle=dutycycle: 0.1-100% default: 50
 
- --physmax==<physical maximum> default: 1200
+ --physmax=physical maximum default: 1200
 
- --physmin==<physical minimum> default: -1200
+ --physmin=physical minimum default: -1200
 
- --amp==<peak amplitude> default: 1000
+ --amp=peak amplitude default: 1000
 
- --unit==<physical dimension> default: uV
+ --unit=physical dimension default: uV
 
- --digmax==<digital maximum> default: 32767 (EDF) or 8388607 (BDF)
+ --digmax=digital maximum default: 32767 (EDF) or 8388607 (BDF)
 
- --digmin==<digital minimum> default: -32768 (EDF) or -8388608 (BDF)
+ --digmin=digital minimum default: -32768 (EDF) or -8388608 (BDF)
 
- --offset==<physical dc-offset> default: 0
+ --offset=physical dc-offset default: 0
 
  --help
 
