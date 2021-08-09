@@ -412,6 +412,10 @@ int main(int argc, char **argv)
       datrecs = duration;
     }
   }
+  else
+  {
+    datrecs = duration;
+  }
 
   buf = (double *)calloc(1, sf * sizeof(double));
   if(buf==NULL)
