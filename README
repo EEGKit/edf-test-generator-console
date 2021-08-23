@@ -1,9 +1,10 @@
 
 This is a commandline tool that generates a waveform stored in the European Data Format (EDF or BDF).
 
-Website: https://www.teuniz.net/EDF-test-file-generator/
+website: https://www.teuniz.net/EDF-test-file-generator/
 
- EDF generator version 1.06 Copyright (c) 2020 - 2021 Teunis van Beelen   email: teuniz@protonmail.com
+
+ EDF generator version 1.07 Copyright (c) 2020 - 2021 Teunis van Beelen   email: teuniz@protonmail.com
 
  Usage: edfgenerator [OPTION]...
 
@@ -13,39 +14,45 @@ Website: https://www.teuniz.net/EDF-test-file-generator/
 
  --len=file duration in seconds default: 30
 
- --rate=samplerate in herz default: 500
+ --rate=samplerate in herz default: 500 (integer only)
 
- --freq=signal frequency in herz default: 10
+ --freq=signal frequency in herz default: 10 (may be a real number e.g. 333.17)
 
  --wave=sine | square | ramp | triangle | white-noise | pink-noise default: sine
 
  --dcycle=dutycycle: 0.1-100% default: 50
 
- --physmax=physical maximum default: 1200
+ --physmax=physical maximum default: 1200 (may be a real number e.g. 1199.99)
 
- --physmin=physical minimum default: -1200
+ --physmin=physical minimum default: -1200 (may be a real number e.g. -1199.99)
 
- --amp=peak amplitude default: 1000
+ --amp=peak amplitude default: 1000 (may be a real number e.g. 999.99)
 
  --unit=physical dimension default: uV
 
- --digmax=digital maximum default: 32767 (EDF) or 8388607 (BDF)
+ --digmax=digital maximum default: 32767 (EDF) or 8388607 (BDF) (integer only)
 
- --digmin=digital minimum default: -32768 (EDF) or -8388608 (BDF)
+ --digmin=digital minimum default: -32768 (EDF) or -8388608 (BDF) (integer only)
 
  --offset=physical dc-offset default: 0
 
  --datrecs=number of datarecords that will be written into the file, has precedence over --len.
 
- --datrec-duration=duration of a datarecord in seconds default: 1
+ --datrec-duration=duration of a datarecord in seconds default: 1 (may be a real number e.g. 0.25)
                    effective samplerate and signal frequency will be inversely proportional to the datarecord duration
+
+ --signals=number of signals default: 1 in case of multiple signals, signal parameters must be separated by a comma e.g.: --rate=1000,800,133
+
  --help
 
+ Note: decimal separator (if any) must be a dot, do not use a comma as a decimal separator
 
 
  example:
 
  edfgenerator --type=bdf --len=60 --rate=44000 --freq=1000 --wave=square --dcycle=15 --unit=V --offset=500 --physmax=5000
+
+ edfgenerator --type=edf --len=30 --signals=5 --rate=1000,800,500,975,999 --freq=5,13,7,1,1 --wave=sine,square,ramp,pink-noise,white-noise --dcycle=50,25,75,50,50 --unit=uV,uV,uV,uV,uV --physmax=3000,3000,3000,3000,3000 --physmin=-3000,-3000,-3000,-3000,-3000 --datrec-duration=0.5
 
 
 

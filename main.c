@@ -43,7 +43,7 @@
 #include "utils.h"
 
 #define PROGRAM_NAME       "edfgenerator"
-#define PROGRAM_VERSION    "1.06"
+#define PROGRAM_VERSION    "1.07"
 
 #define FILETYPE_EDF       (0)
 #define FILETYPE_BDF       (1)
@@ -55,12 +55,47 @@
 #define WAVE_WHITE_NOISE   (4)
 #define WAVE_PINK_NOISE    (5)
 
+#define EDF_MAX_CHNS      (16)
 
+
+struct sig_par_struct
+{
+  int sf[EDF_MAX_CHNS];
+  int digmax[EDF_MAX_CHNS];
+  int digmin[EDF_MAX_CHNS];
+  int waveform[EDF_MAX_CHNS];
+
+  double w[EDF_MAX_CHNS];
+  double q[EDF_MAX_CHNS];
+  double sine_1[EDF_MAX_CHNS];
+  double square_1[EDF_MAX_CHNS];
+  double triangle_1[EDF_MAX_CHNS];
+  double signalfreq[EDF_MAX_CHNS];
+  double physmax[EDF_MAX_CHNS];
+  double physmin[EDF_MAX_CHNS];
+  double peakamp[EDF_MAX_CHNS];
+  double dutycycle[EDF_MAX_CHNS];
+  double dc_offset[EDF_MAX_CHNS];
+
+  double b0[EDF_MAX_CHNS];
+  double b1[EDF_MAX_CHNS];
+  double b2[EDF_MAX_CHNS];
+  double b3[EDF_MAX_CHNS];
+  double b4[EDF_MAX_CHNS];
+  double b5[EDF_MAX_CHNS];
+  double b6[EDF_MAX_CHNS];
+
+  char physdim[EDF_MAX_CHNS][32];
+
+  double *buf[EDF_MAX_CHNS];
+
+  int *randbuf[EDF_MAX_CHNS];
+} sig_par;
 
 
 int main(int argc, char **argv)
 {
-  int i, j,
+  int i, j, n, chan,
       err,
       option_index=0,
       c=0,
@@ -68,36 +103,20 @@ int main(int argc, char **argv)
       hdl=-1,
       filetype=0,
       duration=30,
-      sf=500,
-      digmax=0,
-      digmin=0,
-      waveform=0,
-      *randbuf=NULL,
       digmax_set=0,
       digmin_set=0,
       datrecs=0,
       datrecs_set=0,
-      datrecduration_set=0;
+      datrecduration_set=0,
+      chns=1,
+      chns_set=0;
 
-  double *buf=NULL,
-         w=1,
-         q=1,
-         sine_1=0,
-         square_1=0,
-         triangle_1=0,
-         signalfreq=10,
-         physmax=1200,
-         physmin=-1200,
-         peakamp=1000,
-         dutycycle=50,
+  double datrecduration=1,
          ftmp,
-         b0, b1, b2, b3, b4, b5, b6,
-         white_noise,
-         dc_offset=0,
-         datrecduration=1;
+         white_noise;
 
-  char physdim[32]="uV",
-       str[1024]="";
+  char str[1024]="",
+       *s_ptr=NULL;
 
   const char waveforms_str[6][16]={"sine", "square", "ramp", "triangle", "white-noise", "pink-noise"};
 
@@ -106,23 +125,39 @@ int main(int argc, char **argv)
   setlinebuf(stdout);
   setlinebuf(stderr);
 
+  memset(&sig_par, 0, sizeof(struct sig_par_struct));
+
+  for(i=0; i<EDF_MAX_CHNS; i++)
+  {
+    sig_par.sf[i] = 500;
+    sig_par.w[i] = 1;
+    sig_par.q[i] = 1;
+    sig_par.signalfreq[i] = 10;
+    sig_par.physmax[i] = 1200;
+    sig_par.physmin[i] = -1200;
+    sig_par.peakamp[i] = 1000;
+    sig_par.dutycycle[i] = 50;
+    strlcpy(sig_par.physdim[i], "uV", 32);
+  }
+
   struct option long_options[] = {
-    {"type", required_argument, 0, 0},
-    {"len", required_argument, 0, 0},
-    {"rate", required_argument, 0, 0},
-    {"freq", required_argument, 0, 0},
-    {"wave", required_argument, 0, 0},
-    {"dcycle", required_argument, 0, 0},
-    {"physmax", required_argument, 0, 0},
-    {"physmin", required_argument, 0, 0},
-    {"amp", required_argument, 0, 0},
-    {"unit", required_argument, 0, 0},
-    {"digmax", required_argument, 0, 0},
-    {"digmin", required_argument, 0, 0},
-    {"offset", required_argument, 0, 0},
-    {"datrecs", required_argument, 0, 0},
-    {"datrec-duration", required_argument, 0, 0},
-    {"help", no_argument, 0, 0},
+    {"type", required_argument, 0, 0},    /*  0 */
+    {"len", required_argument, 0, 0},     /*  1 */
+    {"rate", required_argument, 0, 0},    /*  2 */
+    {"freq", required_argument, 0, 0},    /*  3 */
+    {"wave", required_argument, 0, 0},    /*  4 */
+    {"dcycle", required_argument, 0, 0},  /*  5 */
+    {"physmax", required_argument, 0, 0}, /*  6 */
+    {"physmin", required_argument, 0, 0}, /*  7 */
+    {"amp", required_argument, 0, 0},     /*  8 */
+    {"unit", required_argument, 0, 0},    /*  9 */
+    {"digmax", required_argument, 0, 0},  /* 10 */
+    {"digmin", required_argument, 0, 0},  /* 11 */
+    {"offset", required_argument, 0, 0},  /* 12 */
+    {"datrecs", required_argument, 0, 0}, /* 13 */
+    {"datrec-duration", required_argument, 0, 0},  /* 14 */
+    {"signals", required_argument, 0, 0}, /* 15 */
+    {"help", no_argument, 0, 0},          /* 16 */
     {0, 0, 0, 0}
   };
 
@@ -132,9 +167,30 @@ int main(int argc, char **argv)
 
     if(c == -1)  break;
 
+      if(option_index == 15)
+      {
+        chns = atoi(optarg);
+        if((chns < 1) || (chns > 16))
+        {
+          fprintf(stderr, "illegal value for option %s, must be in the range 1 to 16\n", long_options[option_index].name);
+          return EXIT_FAILURE;
+        }
+
+        if(chns > 1)  chns_set = 1;
+      }
+  }
+
+  optind = 1;
+
+  while(1)
+  {
+    c = getopt_long_only(argc, argv, "", long_options, &option_index);
+
+    if(c == -1)  break;
+
     if(c == 0)
     {
-      if(option_index < 13)
+      if(option_index < 16)
       {
         if(optarg == NULL)
         {
@@ -170,88 +226,113 @@ int main(int argc, char **argv)
         }
       }
 
-      if(option_index == 2)
+      if((option_index >= 2) && (option_index <= 12))  /* signal parameters */
       {
-        sf = atoi(optarg);
-        if(sf < 1)
+        for(n=0; n<chns; n++)
         {
-          fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
-          return EXIT_FAILURE;
-        }
-      }
-
-      if(option_index == 3)
-      {
-        signalfreq = atof(optarg);
-        if((signalfreq < 9.99999e-2) || (signalfreq > (sf / 4.0 + 1e-6)))
-        {
-          fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
-          return EXIT_FAILURE;
-        }
-      }
-
-      if(option_index == 4)
-      {
-        for(i=0; i<6; i++)
-        {
-          if(!strcmp(optarg, waveforms_str[i]))
+          if(!n)
           {
-            waveform = i;
+            s_ptr = strtok(optarg, ",");
+          }
+          else
+          {
+            s_ptr = strtok(NULL, ",");
+          }
+          if(s_ptr == NULL)
+          {
             break;
           }
+
+          if(option_index == 2)
+          {
+            sig_par.sf[n] = atoi(s_ptr);
+            if(sig_par.sf[n] < 1)
+            {
+              fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
+              return EXIT_FAILURE;
+            }
+          }
+
+          if(option_index == 3)
+          {
+            sig_par.signalfreq[n] = atof(s_ptr);
+            if((sig_par.signalfreq[n] < 9.99999e-2) || (sig_par.signalfreq[n] > (sig_par.sf[n] / 4.0 + 1e-6)))
+            {
+              fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
+              return EXIT_FAILURE;
+            }
+          }
+
+          if(option_index == 4)
+          {
+            for(i=0; i<6; i++)
+            {
+              if(!strcmp(s_ptr, waveforms_str[i]))
+              {
+                sig_par.waveform[n] = i;
+                break;
+              }
+            }
+            if(i==6)
+            {
+              fprintf(stderr, "unrecognized value for option %s\n", long_options[option_index].name);
+              return EXIT_FAILURE;
+            }
+          }
+
+          if(option_index == 5)
+          {
+            sig_par.dutycycle[n] = atof(s_ptr);
+            if((sig_par.dutycycle[n] < 0.099999) || (sig_par.dutycycle[n] > 100.000001))
+            {
+              fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
+              return EXIT_FAILURE;
+            }
+          }
+
+          if(option_index == 6)
+          {
+            sig_par.physmax[n] = atof(s_ptr);
+          }
+
+          if(option_index == 7)
+          {
+            sig_par.physmin[n] = atof(s_ptr);
+          }
+
+          if(option_index == 8)
+          {
+            sig_par.peakamp[n] = atof(s_ptr);
+          }
+
+          if(option_index == 9)
+          {
+            strlcpy(sig_par.physdim[n], s_ptr, 16);
+          }
+
+          if(option_index == 10)
+          {
+            sig_par.digmax[n] = atoi(s_ptr);
+            digmax_set = 1;
+          }
+
+          if(option_index == 11)
+          {
+            sig_par.digmin[n] = atoi(s_ptr);
+            digmin_set = 1;
+          }
+
+          if(option_index == 12)
+          {
+            sig_par.dc_offset[n] = atof(s_ptr);
+          }
         }
-        if(i==6)
+
+        if(n != chns)
         {
-          fprintf(stderr, "unrecognized value for option %s\n", long_options[option_index].name);
+          fprintf(stderr, "found %i parameters for option %s but expected %i\n", n, long_options[option_index].name, chns);
           return EXIT_FAILURE;
         }
-      }
-
-      if(option_index == 5)
-      {
-        dutycycle = atof(optarg);
-        if((dutycycle < 0.099999) || (dutycycle > 100.000001))
-        {
-          fprintf(stderr, "illegal value for option %s\n", long_options[option_index].name);
-          return EXIT_FAILURE;
-        }
-      }
-
-      if(option_index == 6)
-      {
-        physmax = atof(optarg);
-      }
-
-      if(option_index == 7)
-      {
-        physmin = atof(optarg);
-      }
-
-      if(option_index == 8)
-      {
-        peakamp = atof(optarg);
-      }
-
-      if(option_index == 9)
-      {
-        strlcpy(physdim, optarg, 16);
-      }
-
-      if(option_index == 10)
-      {
-        digmax = atoi(optarg);
-        digmax_set = 1;
-      }
-
-      if(option_index == 11)
-      {
-        digmin = atoi(optarg);
-        digmin_set = 1;
-      }
-
-      if(option_index == 12)
-      {
-        dc_offset = atof(optarg);
       }
 
       if(option_index == 13)
@@ -276,7 +357,7 @@ int main(int argc, char **argv)
         datrecduration_set = 1;
       }
 
-      if(option_index == 15)
+      if(option_index == 16)
       {
         fprintf(stdout, "\n EDF generator version " PROGRAM_VERSION
           " Copyright (c) 2020 - 2021 Teunis van Beelen   email: teuniz@protonmail.com\n"
@@ -284,21 +365,23 @@ int main(int argc, char **argv)
           "\n options:\n"
           "\n --type=edf|bdf default: edf\n"
           "\n --len=file duration in seconds default: 30\n"
-          "\n --rate=samplerate in herz default: 500\n"
-          "\n --freq=signal frequency in herz default: 10\n"
+          "\n --rate=samplerate in herz default: 500 (integer only)\n"
+          "\n --freq=signal frequency in herz default: 10 (may be a real number e.g. 333.17)\n"
           "\n --wave=sine | square | ramp | triangle | white-noise | pink-noise default: sine\n"
           "\n --dcycle=dutycycle: 0.1-100%% default: 50\n"
-          "\n --physmax=physical maximum default: 1200\n"
-          "\n --physmin=physical minimum default: -1200\n"
-          "\n --amp=peak amplitude default: 1000\n"
+          "\n --physmax=physical maximum default: 1200 (may be a real number e.g. 1199.99)\n"
+          "\n --physmin=physical minimum default: -1200 (may be a real number e.g. -1199.99)\n"
+          "\n --amp=peak amplitude default: 1000 (may be a real number e.g. 999.99)\n"
           "\n --unit=physical dimension default: uV\n"
-          "\n --digmax=digital maximum default: 32767 (EDF) or 8388607 (BDF)\n"
-          "\n --digmin=digital minimum default: -32768 (EDF) or -8388608 (BDF)\n"
+          "\n --digmax=digital maximum default: 32767 (EDF) or 8388607 (BDF) (integer only)\n"
+          "\n --digmin=digital minimum default: -32768 (EDF) or -8388608 (BDF) (integer only)\n"
           "\n --offset=physical dc-offset default: 0\n"
           "\n --datrecs=number of datarecords that will be written into the file, has precedence over --len.\n"
-          "\n --datrec-duration=duration of a datarecord in seconds default: 1\n"
-          "                   effective samplerate and signal frequency will be inversely proportional to the datarecord duration"
+          "\n --datrec-duration=duration of a datarecord in seconds default: 1 (may be a real number e.g. 0.25)\n"
+          "                   effective samplerate and signal frequency will be inversely proportional to the datarecord duration\n"
+          "\n --signals=number of signals default: 1 in case of multiple signals, signal parameters must be separated by a comma e.g.: --rate=1000,800,133\n"
           "\n --help\n\n"
+          " Note: decimal separator (if any) must be a dot, do not use a comma as a decimal separator\n\n"
         );
         return EXIT_SUCCESS;
       }
@@ -316,88 +399,91 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if(!digmax_set)
+  for(chan=0; chan<chns; chan++)
   {
-    if(filetype == FILETYPE_EDF)
+    if(!digmax_set)
     {
-      digmax = 32767;
-    }
-    else
-    {
-      digmax = 8388607;
-    }
-  }
-
-  if(!digmin_set)
-  {
-    if(filetype == FILETYPE_EDF)
-    {
-      digmin = -32768;
-    }
-    else
-    {
-      digmin = -8388608;
-    }
-  }
-
-  if(physmax > 9999999.5)
-  {
-    fprintf(stderr, "error: physical maximum must be <= 9999999\n");
-    return EXIT_FAILURE;
-  }
-
-  if(physmin < -9999999.5)
-  {
-    fprintf(stderr, "error: physical minimum must be >= -9999999\n");
-    return EXIT_FAILURE;
-  }
-
-  if(peakamp < 0.9999)
-  {
-    fprintf(stderr, "error: peak amplitude must be >= 1\n");
-    return EXIT_FAILURE;
-  }
-
-  if((physmax < ((peakamp * 1.05) + dc_offset)) || (physmin > ((peakamp * -1.05) + dc_offset)))
-  {
-    fprintf(stderr, "error: physical maximum must be higher than peak amplitude * 1.05 + DC-offset and physical minimum must be more lower than peak amplitude * -1.05 + DC-offset\n");
-    return EXIT_FAILURE;
-  }
-
-  if(filetype == FILETYPE_BDF)
-  {
-    if(digmax > 8388607)
-    {
-      fprintf(stderr, "error: digital maximum must be <= 8388607\n");
-      return EXIT_FAILURE;
-    }
-
-    if(digmin < -8388608)
-    {
-      fprintf(stderr, "error: digital minimum must be >= -8388608\n");
-      return EXIT_FAILURE;
-    }
-  }
-  else if(filetype == FILETYPE_EDF)
-    {
-      if(digmax > 32767)
+      if(filetype == FILETYPE_EDF)
       {
-        fprintf(stderr, "error: digital maximum must be <= 32767\n");
-        return EXIT_FAILURE;
+        sig_par.digmax[chan] = 32767;
       }
-
-      if(digmin < -32768)
+      else
       {
-        fprintf(stderr, "error: digital minimum must be >= -32768\n");
-        return EXIT_FAILURE;
+        sig_par.digmax[chan] = 8388607;
       }
     }
 
-    if(digmin >= digmax)
+    if(!digmin_set)
     {
-      fprintf(stderr, "error: digital minimum must be less than digital maximum\n");
+      if(filetype == FILETYPE_EDF)
+      {
+        sig_par.digmin[chan] = -32768;
+      }
+      else
+      {
+        sig_par.digmin[chan] = -8388608;
+      }
+    }
+
+    if(sig_par.physmax[chan] > 9999999.5)
+    {
+      fprintf(stderr, "error: physical maximum must be <= 9999999\n");
       return EXIT_FAILURE;
     }
+
+    if(sig_par.physmin[chan] < -9999999.5)
+    {
+      fprintf(stderr, "error: physical minimum must be >= -9999999\n");
+      return EXIT_FAILURE;
+    }
+
+    if(sig_par.peakamp[chan] < 0.9999)
+    {
+      fprintf(stderr, "error: peak amplitude must be >= 1\n");
+      return EXIT_FAILURE;
+    }
+
+    if((sig_par.physmax[chan] < ((sig_par.peakamp[chan] * 1.05) + sig_par.dc_offset[chan])) || (sig_par.physmin[chan] > ((sig_par.peakamp[chan] * -1.05) + sig_par.dc_offset[chan])))
+    {
+      fprintf(stderr, "error: physical maximum must be higher than peak amplitude * 1.05 + DC-offset and physical minimum must be more lower than peak amplitude * -1.05 + DC-offset\n");
+      return EXIT_FAILURE;
+    }
+
+    if(filetype == FILETYPE_BDF)
+    {
+      if(sig_par.digmax[chan] > 8388607)
+      {
+        fprintf(stderr, "error: digital maximum must be <= 8388607\n");
+        return EXIT_FAILURE;
+      }
+
+      if(sig_par.digmin[chan] < -8388608)
+      {
+        fprintf(stderr, "error: digital minimum must be >= -8388608\n");
+        return EXIT_FAILURE;
+      }
+    }
+    else if(filetype == FILETYPE_EDF)
+      {
+        if(sig_par.digmax[chan] > 32767)
+        {
+          fprintf(stderr, "error: digital maximum must be <= 32767\n");
+          return EXIT_FAILURE;
+        }
+
+        if(sig_par.digmin[chan] < -32768)
+        {
+          fprintf(stderr, "error: digital minimum must be >= -32768\n");
+          return EXIT_FAILURE;
+        }
+      }
+
+      if(sig_par.digmin[chan] >= sig_par.digmax[chan])
+      {
+        fprintf(stderr, "error: digital minimum must be less than digital maximum\n");
+        return EXIT_FAILURE;
+      }
+  }
 
   if(datrecduration_set)
   {
@@ -417,46 +503,64 @@ int main(int argc, char **argv)
     datrecs = duration;
   }
 
-  buf = (double *)calloc(1, sf * sizeof(double));
-  if(buf==NULL)
+  for(i=0; i<EDF_MAX_CHNS; i++)
   {
-    fprintf(stderr, "Malloc error line %i\n", __LINE__);
-    return EXIT_FAILURE;
+    sig_par.buf[i] = NULL;
   }
 
-  randbuf = (int *)calloc(1, sf * sizeof(int));
-  if(randbuf==NULL)
+  for(i=0; i<chns; i++)
   {
-    fprintf(stderr, "Malloc error line %i\n", __LINE__);
-    return EXIT_FAILURE;
+    sig_par.buf[i] = (double *)calloc(1, sig_par.sf[i] * sizeof(double));
+    if(sig_par.buf[i]==NULL)
+    {
+      fprintf(stderr, "Malloc error line %i\n", __LINE__);
+      return EXIT_FAILURE;
+    }
+
+    if((sig_par.waveform[i] == WAVE_WHITE_NOISE) || (sig_par.waveform[i] == WAVE_PINK_NOISE))  /* white or pink noise */
+    {
+      sig_par.randbuf[i] = (int *)calloc(1, sig_par.sf[i] * sizeof(int));
+      if(sig_par.randbuf[i]==NULL)
+      {
+        fprintf(stderr, "Malloc error line %i\n", __LINE__);
+        return EXIT_FAILURE;
+      }
+    }
   }
 
-  sprintf(str, "edfgenerator_%f", sf / datrecduration);
-  remove_trailing_zeros(str);
-  sprintf(str + strlen(str), "Hz_%s_%f", waveforms_str[waveform], signalfreq / datrecduration);
-  remove_trailing_zeros(str);
-  strcat(str, "Hz");
-
-  if(waveform)
+  if(chns == 1)
   {
-    sprintf(str + strlen(str), "_%f", dutycycle);
-
+    sprintf(str, "edfgenerator_%f", sig_par.sf[0] / datrecduration);
     remove_trailing_zeros(str);
+    sprintf(str + strlen(str), "Hz_%s_%f", waveforms_str[sig_par.waveform[0]], sig_par.signalfreq[0] / datrecduration);
+    remove_trailing_zeros(str);
+    strcat(str, "Hz");
 
-    strcat(str, "pct");
+    if(sig_par.waveform[0])
+    {
+      sprintf(str + strlen(str), "_%f", sig_par.dutycycle[0]);
+
+      remove_trailing_zeros(str);
+
+      strcat(str, "pct");
+    }
+  }
+  else
+  {
+    sprintf(str, "edfgenerator");
   }
 
   if(filetype == FILETYPE_BDF)
   {
     strcat(str, ".bdf");
 
-    hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_BDFPLUS, 1);
+    hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_BDFPLUS, chns);
   }
   else if(filetype == FILETYPE_EDF)
     {
       strcat(str, ".edf");
 
-      hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_EDFPLUS, 1);
+      hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_EDFPLUS, chns);
     }
 
   if(hdl<0)
@@ -483,244 +587,250 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  if(edf_set_samplefrequency(hdl, 0, sf))
+  for(i=0; i<chns; i++)
   {
-    fprintf(stderr, "error: edf_set_samplefrequency() line %i\n", __LINE__);
-
-    return EXIT_FAILURE;
-  }
-
-  if(edf_set_digital_maximum(hdl, 0, digmax))
-  {
-    fprintf(stderr, "error: edf_set_digital_maximum() line %i\n", __LINE__);
-
-    return EXIT_FAILURE;
-  }
-
-  if(edf_set_digital_minimum(hdl, 0, digmin))
-  {
-    fprintf(stderr, "error: edf_set_digital_minimum() line %i\n", __LINE__);
-
-    return EXIT_FAILURE;
-  }
-
-  if(edf_set_physical_maximum(hdl, 0, physmax))
-  {
-    fprintf(stderr, "error: edf_set_physical_maximum() line %i\n", __LINE__);
-
-    return EXIT_FAILURE;
-  }
-
-
-  if(edf_set_physical_minimum(hdl, 0, physmin))
-  {
-    fprintf(stderr, "error: edf_set_physical_minimum() line %i\n", __LINE__);
-
-    return EXIT_FAILURE;
-  }
-
-  if(edf_set_physical_dimension(hdl, 0, physdim))
-  {
-    fprintf(stderr, "error: edf_set_physical_dimension() line %i\n", __LINE__);
-
-    return EXIT_FAILURE;
-  }
-
-  if(waveform == WAVE_SINE)
-  {
-    snprintf(str, 18, "sine %.2fHz", signalfreq / datrecduration);
-  }
-  else if(waveform == WAVE_SQUARE)
+    if(edf_set_samplefrequency(hdl, i, sig_par.sf[i]))
     {
-      snprintf(str, 18, "square %.2fHz", signalfreq / datrecduration);
-    }
-    else if(waveform == WAVE_RAMP)
-      {
-        snprintf(str, 18, "ramp %.2fHz", signalfreq / datrecduration);
-      }
-      else if(waveform == WAVE_TRIANGLE)
-        {
-          snprintf(str, 18, "triangle %.2fHz", signalfreq / datrecduration);
-        }
-        else if(waveform == WAVE_WHITE_NOISE)
-          {
-            snprintf(str, 18, "white noise");
-          }
-          else if(waveform == WAVE_PINK_NOISE)
-            {
-              snprintf(str, 18, "pink noise");
-            }
-
-  remove_trailing_zeros(str);
-
-  if(edf_set_label(hdl, 0, str))
-  {
-    fprintf(stderr, "error: edf_set_label() line %i\n", __LINE__);
-
-    return EXIT_FAILURE;
-  }
-
-  sine_1 = 0.0;
-
-  square_1 = 0.0;
-
-  w = M_PI * 2.0;
-
-  q = 1.0 / sf;
-
-  b0 = 0;
-  b1 = 0;
-  b2 = 0;
-  b3 = 0;
-  b4 = 0;
-  b5 = 0;
-  b6 = 0;
-
-  w /= (sf / signalfreq);
-
-  if((waveform == WAVE_WHITE_NOISE) || (waveform == WAVE_PINK_NOISE))
-  {
-    fd = open("/dev/urandom", O_RDONLY | O_NONBLOCK);
-    if(fd < 0)
-    {
-      fprintf(stderr, "error: open /dev/urandom line %i\n", __LINE__);
+      fprintf(stderr, "error: edf_set_samplefrequency() line %i\n", __LINE__);
 
       return EXIT_FAILURE;
+    }
+
+    if(edf_set_digital_maximum(hdl, i, sig_par.digmax[i]))
+    {
+      fprintf(stderr, "error: edf_set_digital_maximum() line %i\n", __LINE__);
+
+      return EXIT_FAILURE;
+    }
+
+    if(edf_set_digital_minimum(hdl, i, sig_par.digmin[i]))
+    {
+      fprintf(stderr, "error: edf_set_digital_minimum() line %i\n", __LINE__);
+
+      return EXIT_FAILURE;
+    }
+
+    if(edf_set_physical_maximum(hdl, i, sig_par.physmax[i]))
+    {
+      fprintf(stderr, "error: edf_set_physical_maximum() line %i\n", __LINE__);
+
+      return EXIT_FAILURE;
+    }
+
+
+    if(edf_set_physical_minimum(hdl, i, sig_par.physmin[i]))
+    {
+      fprintf(stderr, "error: edf_set_physical_minimum() line %i\n", __LINE__);
+
+      return EXIT_FAILURE;
+    }
+
+    if(edf_set_physical_dimension(hdl, i, sig_par.physdim[i]))
+    {
+      fprintf(stderr, "error: edf_set_physical_dimension() line %i\n", __LINE__);
+
+      return EXIT_FAILURE;
+    }
+
+    if(sig_par.waveform[i] == WAVE_SINE)
+    {
+      snprintf(str, 18, "sine %.2fHz", sig_par.signalfreq[i] / datrecduration);
+    }
+    else if(sig_par.waveform[i] == WAVE_SQUARE)
+      {
+        snprintf(str, 18, "square %.2fHz", sig_par.signalfreq[i] / datrecduration);
+      }
+      else if(sig_par.waveform[i] == WAVE_RAMP)
+        {
+          snprintf(str, 18, "ramp %.2fHz", sig_par.signalfreq[i] / datrecduration);
+        }
+        else if(sig_par.waveform[i] == WAVE_TRIANGLE)
+          {
+            snprintf(str, 18, "triangle %.2fHz", sig_par.signalfreq[i] / datrecduration);
+          }
+          else if(sig_par.waveform[i] == WAVE_WHITE_NOISE)
+            {
+              snprintf(str, 18, "white noise");
+            }
+            else if(sig_par.waveform[i] == WAVE_PINK_NOISE)
+              {
+                snprintf(str, 18, "pink noise");
+              }
+
+    remove_trailing_zeros(str);
+
+    if(edf_set_label(hdl, i, str))
+    {
+      fprintf(stderr, "error: edf_set_label() line %i\n", __LINE__);
+
+      return EXIT_FAILURE;
+    }
+  }
+
+  for(i=0; i<chns; i++)
+  {
+    sig_par.w[i] = M_PI * 2.0;
+
+    sig_par.q[i] = 1.0 / sig_par.sf[i];
+
+    sig_par.w[i] /= (sig_par.sf[i] / sig_par.signalfreq[i]);
+  }
+
+  for(i=0; i<chns; i++)
+  {
+    if((sig_par.waveform[i] == WAVE_WHITE_NOISE) || (sig_par.waveform[i] == WAVE_PINK_NOISE))
+    {
+      fd = open("/dev/urandom", O_RDONLY | O_NONBLOCK);
+      if(fd < 0)
+      {
+        fprintf(stderr, "error: cannot open /dev/urandom    line %i\n", __LINE__);
+
+        return EXIT_FAILURE;
+      }
+
+      break;
     }
   }
 
   for(j=0; j<datrecs; j++)
   {
-    if(waveform == WAVE_SINE)
+    for(chan=0; chan<chns; chan++)
     {
-      for(i=0; i<sf; i++)
+      if(sig_par.waveform[chan] == WAVE_SINE)
       {
-        sine_1 += w;
-
-        buf[i] = (sin(sine_1) * peakamp) + dc_offset;
-      }
-    }
-    else if(waveform == WAVE_SQUARE)
-      {
-        for(i=0; i<sf; i++)
+        for(i=0; i<sig_par.sf[chan]; i++)
         {
-          square_1 += q;
+          sig_par.sine_1[chan] += sig_par.w[chan];
 
-          ftmp = fmod(square_1, 1.0 / signalfreq);
-
-          if((ftmp * signalfreq) < (dutycycle / 100.0))
-          {
-            buf[i] = peakamp;
-          }
-          else
-          {
-            buf[i] = -peakamp;
-          }
-          buf[i] += dc_offset;
+          sig_par.buf[chan][i] = (sin(sig_par.sine_1[chan]) * sig_par.peakamp[chan]) + sig_par.dc_offset[chan];
         }
       }
-      else if(waveform == WAVE_RAMP)
+      else if(sig_par.waveform[chan] == WAVE_SQUARE)
         {
-          for(i=0; i<sf; i++)
+          for(i=0; i<sig_par.sf[chan]; i++)
           {
-            triangle_1 += q;
+            sig_par.square_1[chan] += sig_par.q[chan];
 
-            ftmp = fmod(triangle_1, 1.0 / signalfreq);
+            ftmp = fmod(sig_par.square_1[chan], 1.0 / sig_par.signalfreq[chan]);
 
-            if((ftmp * signalfreq) < (dutycycle / 100.0))
+            if((ftmp * sig_par.signalfreq[chan]) < (sig_par.dutycycle[chan] / 100.0))
             {
-              buf[i] = peakamp * (200.0 / dutycycle) * ftmp * signalfreq - peakamp;
+              sig_par.buf[chan][i] = sig_par.peakamp[chan];
             }
             else
             {
-              buf[i] = -peakamp;
+              sig_par.buf[chan][i] = -sig_par.peakamp[chan];
             }
-            buf[i] += dc_offset;
+            sig_par.buf[chan][i] += sig_par.dc_offset[chan];
           }
         }
-        else if(waveform == WAVE_TRIANGLE)
+        else if(sig_par.waveform[chan] == WAVE_RAMP)
           {
-            for(i=0; i<sf; i++)
+            for(i=0; i<sig_par.sf[chan]; i++)
             {
-              triangle_1 += q;
+              sig_par.triangle_1[chan] += sig_par.q[chan];
 
-              ftmp = fmod(triangle_1, 1.0 / signalfreq);
+              ftmp = fmod(sig_par.triangle_1[chan], 1.0 / sig_par.signalfreq[chan]);
 
-              if((ftmp * signalfreq) < (dutycycle / 200.0))
+              if((ftmp * sig_par.signalfreq[chan]) < (sig_par.dutycycle[chan] / 100.0))
               {
-                buf[i] = peakamp * (400.0 / dutycycle) * ftmp * signalfreq - peakamp;
-                buf[i] += dc_offset;
+                sig_par.buf[chan][i] = sig_par.peakamp[chan] * (200.0 / sig_par.dutycycle[chan]) * ftmp * sig_par.signalfreq[chan] - sig_par.peakamp[chan];
               }
-              else if((ftmp * signalfreq) < (dutycycle / 100.0))
-                {
-                  buf[i] = peakamp * (400.0 / dutycycle) * ((dutycycle / 100.0) - (ftmp * signalfreq)) - peakamp;
-                }
-                else
-                {
-                  buf[i] = -peakamp;
-                }
-                buf[i] += dc_offset;
+              else
+              {
+                sig_par.buf[chan][i] = -sig_par.peakamp[chan];
+              }
+              sig_par.buf[chan][i] += sig_par.dc_offset[chan];
             }
           }
-          else if((waveform == WAVE_WHITE_NOISE) || (waveform == WAVE_PINK_NOISE))
+          else if(sig_par.waveform[chan] == WAVE_TRIANGLE)
             {
-              err = read(fd, randbuf, sf * sizeof(int));
-              if(err != (sf * 4))
+              for(i=0; i<sig_par.sf[chan]; i++)
               {
-                fprintf(stderr, "error: read() line %i\n", __LINE__);
+                sig_par.triangle_1[chan] += sig_par.q[chan];
 
-                return EXIT_FAILURE;
-              }
+                ftmp = fmod(sig_par.triangle_1[chan], 1.0 / sig_par.signalfreq[chan]);
 
-              if(waveform == WAVE_WHITE_NOISE)
-              {
-                for(i=0; i<sf; i++)
+                if((ftmp * sig_par.signalfreq[chan]) < (sig_par.dutycycle[chan] / 200.0))
                 {
-                  buf[i] = (randbuf[i] % ((int)(peakamp * 100.0))) / 100.0;
-                  buf[i] += dc_offset;
+                  sig_par.buf[chan][i] = sig_par.peakamp[chan] * (400.0 / sig_par.dutycycle[chan]) * ftmp * sig_par.signalfreq[chan] - sig_par.peakamp[chan];
+                  sig_par.buf[chan][i] += sig_par.dc_offset[chan];
                 }
-              }
-              else if(waveform == WAVE_PINK_NOISE)
-                {
-/* This is an approximation to a -10dB/decade (-3dB/octave) filter using a weighted sum
- * of first order filters. It is accurate to within +/-0.05dB above 9.2Hz
- * (44100Hz sampling rate). Unity gain is at Nyquist, but can be adjusted
- * by scaling the numbers at the end of each line.
- * http://www.firstpr.com.au/dsp/pink-noise/
- */
-                  for(i=0; i<sf; i++)
+                else if((ftmp * sig_par.signalfreq[chan]) < (sig_par.dutycycle[chan] / 100.0))
                   {
-                    white_noise = (randbuf[i] % ((int)(peakamp * 100.0))) / 600.0;
-                    b0 = 0.99886 * b0 + white_noise * 0.0555179;
-                    b1 = 0.99332 * b1 + white_noise * 0.0750759;
-                    b2 = 0.96900 * b2 + white_noise * 0.1538520;
-                    b3 = 0.86650 * b3 + white_noise * 0.3104856;
-                    b4 = 0.55000 * b4 + white_noise * 0.5329522;
-                    b5 = -0.7616 * b5 - white_noise * 0.0168980;
-                    buf[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white_noise * 0.5362;
-                    buf[i] += dc_offset;
-                    b6 = white_noise * 0.115926;
+                    sig_par.buf[chan][i] = sig_par.peakamp[chan] * (400.0 / sig_par.dutycycle[chan]) * ((sig_par.dutycycle[chan] / 100.0) - (ftmp * sig_par.signalfreq[chan])) - sig_par.peakamp[chan];
+                  }
+                  else
+                  {
+                    sig_par.buf[chan][i] = -sig_par.peakamp[chan];
+                  }
+                  sig_par.buf[chan][i] += sig_par.dc_offset[chan];
+              }
+            }
+            else if((sig_par.waveform[chan] == WAVE_WHITE_NOISE) || (sig_par.waveform[chan] == WAVE_PINK_NOISE))
+              {
+                err = read(fd, sig_par.randbuf[chan], sig_par.sf[chan] * sizeof(int));
+                if(err != (sig_par.sf[chan] * 4))
+                {
+                  perror(NULL);
+                  fprintf(stderr, "error: read() returned %i   line %i\n", err, __LINE__);
+
+                  return EXIT_FAILURE;
+                }
+
+                if(sig_par.waveform[chan] == WAVE_WHITE_NOISE)
+                {
+                  for(i=0; i<sig_par.sf[chan]; i++)
+                  {
+                    sig_par.buf[chan][i] = (sig_par.randbuf[chan][i] % ((int)(sig_par.peakamp[chan] * 100.0))) / 100.0;
+                    sig_par.buf[chan][i] += sig_par.dc_offset[chan];
                   }
                 }
-            }
+                else if(sig_par.waveform[chan] == WAVE_PINK_NOISE)
+                  {
+  /* This is an approximation to a -10dB/decade (-3dB/octave) filter using a weighted sum
+   * of first order filters. It is accurate to within +/-0.05dB above 9.2Hz
+   * (44100Hz sampling rate). Unity gain is at Nyquist, but can be adjusted
+   * by scaling the numbers at the end of each line.
+   * http://www.firstpr.com.au/dsp/pink-noise/
+   */
+                    for(i=0; i<sig_par.sf[chan]; i++)
+                    {
+                      white_noise = (sig_par.randbuf[chan][i] % ((int)(sig_par.peakamp[chan] * 100.0))) / 600.0;
+                      sig_par.b0[chan] = 0.99886 * sig_par.b0[chan] + white_noise * 0.0555179;
+                      sig_par.b1[chan] = 0.99332 * sig_par.b1[chan] + white_noise * 0.0750759;
+                      sig_par.b2[chan] = 0.96900 * sig_par.b2[chan] + white_noise * 0.1538520;
+                      sig_par.b3[chan] = 0.86650 * sig_par.b3[chan] + white_noise * 0.3104856;
+                      sig_par.b4[chan] = 0.55000 * sig_par.b4[chan] + white_noise * 0.5329522;
+                      sig_par.b5[chan] = -0.7616 * sig_par.b5[chan] - white_noise * 0.0168980;
+                      sig_par.buf[chan][i] = sig_par.b0[chan] + sig_par.b1[chan] + sig_par.b2[chan] + sig_par.b3[chan] + sig_par.b4[chan] + sig_par.b5[chan] + sig_par.b6[chan] + white_noise * 0.5362;
+                      sig_par.buf[chan][i] += sig_par.dc_offset[chan];
+                      sig_par.b6[chan] = white_noise * 0.115926;
+                    }
+                  }
+              }
 
-    if(edfwrite_physical_samples(hdl, buf))
-    {
-      fprintf(stderr, "error: edfwrite_physical_samples() line %i\n", __LINE__);
+      if(edfwrite_physical_samples(hdl, sig_par.buf[chan]))
+      {
+        fprintf(stderr, "error: edfwrite_physical_samples() line %i\n", __LINE__);
 
-      return EXIT_FAILURE;
+        return EXIT_FAILURE;
+      }
     }
   }
 
-  if((waveform == WAVE_WHITE_NOISE) || (waveform == WAVE_PINK_NOISE))
+  if(fd >= 0)
   {
     close(fd);
   }
 
   edfclose_file(hdl);
 
-  free(buf);
-  free(randbuf);
+  for(i=0; i<chns; i++)
+  {
+    free(sig_par.buf[i]);
+    free(sig_par.randbuf[i]);
+  }
 
   return EXIT_SUCCESS;
 }
