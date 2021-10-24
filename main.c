@@ -167,7 +167,7 @@ int main(int argc, char **argv)
 
     if(c == -1)  break;
 
-      if(option_index == 15)
+      if(option_index == 15)  /* signals */
       {
         chns = atoi(optarg);
         if((chns < 1) || (chns > 16))
@@ -199,7 +199,7 @@ int main(int argc, char **argv)
         }
       }
 
-      if(option_index == 0)
+      if(option_index == 0)  /* type */
       {
         if(!strcmp(optarg, "edf"))
         {
@@ -216,7 +216,7 @@ int main(int argc, char **argv)
           }
       }
 
-      if(option_index == 1)
+      if(option_index == 1)  /* len */
       {
         duration = atoi(optarg);
         if(duration < 1)
@@ -253,7 +253,7 @@ int main(int argc, char **argv)
             }
           }
 
-          if(option_index == 3)
+          if(option_index == 3)  /* rate */
           {
             sig_par.signalfreq[n] = atof(s_ptr);
             if((sig_par.signalfreq[n] < 9.99999e-2) || (sig_par.signalfreq[n] > (sig_par.sf[n] / 4.0 + 1e-6)))
@@ -263,7 +263,7 @@ int main(int argc, char **argv)
             }
           }
 
-          if(option_index == 4)
+          if(option_index == 4)  /* wave */
           {
             for(i=0; i<6; i++)
             {
@@ -280,7 +280,7 @@ int main(int argc, char **argv)
             }
           }
 
-          if(option_index == 5)
+          if(option_index == 5)  /* dcycle */
           {
             sig_par.dutycycle[n] = atof(s_ptr);
             if((sig_par.dutycycle[n] < 0.099999) || (sig_par.dutycycle[n] > 100.000001))
@@ -290,39 +290,39 @@ int main(int argc, char **argv)
             }
           }
 
-          if(option_index == 6)
+          if(option_index == 6)  /* physmax */
           {
             sig_par.physmax[n] = atof(s_ptr);
           }
 
-          if(option_index == 7)
+          if(option_index == 7)  /* physmin */
           {
             sig_par.physmin[n] = atof(s_ptr);
           }
 
-          if(option_index == 8)
+          if(option_index == 8)  /* amp */
           {
             sig_par.peakamp[n] = atof(s_ptr);
           }
 
-          if(option_index == 9)
+          if(option_index == 9)  /* unit */
           {
             strlcpy(sig_par.physdim[n], s_ptr, 16);
           }
 
-          if(option_index == 10)
+          if(option_index == 10)  /* digmax */
           {
             sig_par.digmax[n] = atoi(s_ptr);
             digmax_set = 1;
           }
 
-          if(option_index == 11)
+          if(option_index == 11)  /* digmin */
           {
             sig_par.digmin[n] = atoi(s_ptr);
             digmin_set = 1;
           }
 
-          if(option_index == 12)
+          if(option_index == 12)  /* offset */
           {
             sig_par.dc_offset[n] = atof(s_ptr);
           }
@@ -335,7 +335,7 @@ int main(int argc, char **argv)
         }
       }
 
-      if(option_index == 13)
+      if(option_index == 13)  /* datrecs */
       {
         datrecs = atoi(optarg);
         if(datrecs < 1)
@@ -346,7 +346,7 @@ int main(int argc, char **argv)
         datrecs_set = 1;
       }
 
-      if(option_index == 14)
+      if(option_index == 14)  /* datrec-duration */
       {
         datrecduration = atof(optarg);
         if((datrecduration < 0.001) || (datrecduration > 60))
@@ -437,15 +437,16 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
     }
 
-    if(sig_par.peakamp[chan] < 0.9999)
+    if(sig_par.peakamp[chan] <= 0.009999)
     {
-      fprintf(stderr, "error: peak amplitude must be >= 1\n");
+      fprintf(stderr, "error: peak amplitude must be >= 0.01\n(amp: %f)\n", sig_par.peakamp[chan]);
       return EXIT_FAILURE;
     }
 
     if((sig_par.physmax[chan] < ((sig_par.peakamp[chan] * 1.05) + sig_par.dc_offset[chan])) || (sig_par.physmin[chan] > ((sig_par.peakamp[chan] * -1.05) + sig_par.dc_offset[chan])))
     {
-      fprintf(stderr, "error: physical maximum must be higher than peak amplitude * 1.05 + DC-offset and physical minimum must be more lower than peak amplitude * -1.05 + DC-offset\n");
+      fprintf(stderr, "error: physical maximum must be higher than peak amplitude * 1.05 + DC-offset and physical minimum must be more lower than peak amplitude * -1.05 + DC-offset\n"
+                      "peak amplitude: %f   physical maximum: %f\n", sig_par.peakamp[chan], sig_par.physmax[chan]);
       return EXIT_FAILURE;
     }
 
