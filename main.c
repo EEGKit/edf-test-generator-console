@@ -108,8 +108,7 @@ int main(int argc, char **argv)
       datrecs=0,
       datrecs_set=0,
       datrecduration_set=0,
-      chns=1,
-      chns_set=0;
+      chns=1;
 
   double datrecduration=1,
          ftmp,
@@ -175,8 +174,6 @@ int main(int argc, char **argv)
           fprintf(stderr, "illegal value for option %s, must be in the range 1 to 16\n", long_options[option_index].name);
           return EXIT_FAILURE;
         }
-
-        if(chns > 1)  chns_set = 1;
       }
   }
 
