@@ -22,6 +22,8 @@ website: https://www.teuniz.net/EDF-test-file-generator/
 
  --dcycle=dutycycle: 0.1-100% default: 50
 
+ --phase=phase: 0-360degr. default: 0
+
  --physmax=physical maximum default: 1200 (may be a real number e.g. 1199.99)
 
  --physmin=physical minimum default: -1200 (may be a real number e.g. -1199.99)
