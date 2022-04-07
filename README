@@ -1,10 +1,10 @@
 
-This is a commandline tool that generates a waveform stored in the European Data Format (EDF or BDF).
+This is a commandline tool that generates waveforms stored in the European Data Format (EDF or BDF).
 
 website: https://www.teuniz.net/EDF-test-file-generator/
 
 
- EDF generator version 1.07 Copyright (c) 2020 - 2021 Teunis van Beelen   email: teuniz@protonmail.com
+ EDF generator version 1.09 Copyright (c) 2020 - 2022 Teunis van Beelen   email: teuniz@protonmail.com
 
  Usage: edfgenerator [OPTION]...
 
@@ -14,9 +14,9 @@ website: https://www.teuniz.net/EDF-test-file-generator/
 
  --len=file duration in seconds default: 30
 
- --rate=samplerate in herz default: 500 (integer only)
+ --rate=samplerate in Hertz default: 500 (integer only)
 
- --freq=signal frequency in herz default: 10 (may be a real number e.g. 333.17)
+ --freq=signal frequency in Hertz default: 10 (may be a real number e.g. 333.17)
 
  --wave=sine | square | ramp | triangle | white-noise | pink-noise default: sine
 
@@ -45,16 +45,24 @@ website: https://www.teuniz.net/EDF-test-file-generator/
 
  --signals=number of signals default: 1 in case of multiple signals, signal parameters must be separated by a comma e.g.: --rate=1000,800,133
 
+ --merge  merge all signals into one trace, requires equal samplerate and equal physical max/min and equal digital max/min and equal physical dimension (units) for all signals
+
  --help
 
  Note: decimal separator (if any) must be a dot, do not use a comma as a decimal separator
 
 
- example:
+ examples:
 
  edfgenerator --type=bdf --len=60 --rate=44000 --freq=1000 --wave=square --dcycle=15 --unit=V --offset=500 --physmax=5000
 
  edfgenerator --type=edf --len=30 --signals=5 --rate=1000,800,500,975,999 --freq=5,13,7,1,1 --wave=sine,square,ramp,pink-noise,white-noise --dcycle=50,25,75,50,50 --unit=uV,uV,uV,uV,uV --physmax=3000,3000,3000,3000,3000 --physmin=-3000,-3000,-3000,-3000,-3000 --datrec-duration=0.5
+
+ merge 3 sine waves into one trace:
+
+ edfgenerator --type=edf --len=30 --signals=3 --rate=1000,1000,1000 --freq=5,15,25 --wave=sine,sine,sine --unit=uV,uV,uV --amp=200,66.667,40 --physmax=3000,3000,3000 --physmin=-3000,-3000,-3000 --merge
+
+
 
 
 

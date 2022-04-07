@@ -43,7 +43,7 @@
 #include "utils.h"
 
 #define PROGRAM_NAME       "edfgenerator"
-#define PROGRAM_VERSION    "1.08"
+#define PROGRAM_VERSION    "1.09"
 
 #define FILETYPE_EDF       (0)
 #define FILETYPE_BDF       (1)
@@ -109,11 +109,14 @@ int main(int argc, char **argv)
       datrecs=0,
       datrecs_set=0,
       datrecduration_set=0,
-      chns=1;
+      merge_set=0,
+      chns=1,
+      edf_chns=1;
 
   double datrecduration=1,
          ftmp,
-         white_noise;
+         white_noise,
+         *merge_buf=NULL;
 
   char str[1024]="",
        *s_ptr=NULL;
@@ -142,24 +145,25 @@ int main(int argc, char **argv)
   }
 
   struct option long_options[] = {
-    {"type", required_argument, 0, 0},    /*  0 */
-    {"len", required_argument, 0, 0},     /*  1 */
-    {"rate", required_argument, 0, 0},    /*  2 */
-    {"freq", required_argument, 0, 0},    /*  3 */
-    {"wave", required_argument, 0, 0},    /*  4 */
-    {"dcycle", required_argument, 0, 0},  /*  5 */
-    {"phase", required_argument, 0, 0},   /*  6 */
-    {"physmax", required_argument, 0, 0}, /*  7 */
-    {"physmin", required_argument, 0, 0}, /*  8 */
-    {"amp", required_argument, 0, 0},     /*  9 */
-    {"unit", required_argument, 0, 0},    /* 10 */
-    {"digmax", required_argument, 0, 0},  /* 11 */
-    {"digmin", required_argument, 0, 0},  /* 12 */
-    {"offset", required_argument, 0, 0},  /* 13 */
-    {"datrecs", required_argument, 0, 0}, /* 14 */
+    {"type",            required_argument, 0, 0},  /*  0 */
+    {"len",             required_argument, 0, 0},  /*  1 */
+    {"rate",            required_argument, 0, 0},  /*  2 */
+    {"freq",            required_argument, 0, 0},  /*  3 */
+    {"wave",            required_argument, 0, 0},  /*  4 */
+    {"dcycle",          required_argument, 0, 0},  /*  5 */
+    {"phase",           required_argument, 0, 0},  /*  6 */
+    {"physmax",         required_argument, 0, 0},  /*  7 */
+    {"physmin",         required_argument, 0, 0},  /*  8 */
+    {"amp",             required_argument, 0, 0},  /*  9 */
+    {"unit",            required_argument, 0, 0},  /* 10 */
+    {"digmax",          required_argument, 0, 0},  /* 11 */
+    {"digmin",          required_argument, 0, 0},  /* 12 */
+    {"offset",          required_argument, 0, 0},  /* 13 */
+    {"datrecs",         required_argument, 0, 0},  /* 14 */
     {"datrec-duration", required_argument, 0, 0},  /* 15 */
-    {"signals", required_argument, 0, 0}, /* 16 */
-    {"help", no_argument, 0, 0},          /* 17 */
+    {"signals",         required_argument, 0, 0},  /* 16 */
+    {"merge",           no_argument,       0, 0},  /* 17 */
+    {"help",            no_argument,       0, 0},  /* 18 */
     {0, 0, 0, 0}
   };
 
@@ -172,10 +176,14 @@ int main(int argc, char **argv)
       if(option_index == 16)  /* signals */
       {
         chns = atoi(optarg);
-        if((chns < 1) || (chns > 16))
+        if((chns < 1) || (chns > EDF_MAX_CHNS))
         {
-          fprintf(stderr, "illegal value for option %s, must be in the range 1 to 16\n", long_options[option_index].name);
+          fprintf(stderr, "illegal value for option %s, must be in the range 1 to %i\n", long_options[option_index].name, EDF_MAX_CHNS);
           return EXIT_FAILURE;
+        }
+        if(chns == 1)
+        {
+          merge_set = 0;
         }
       }
   }
@@ -368,7 +376,15 @@ int main(int argc, char **argv)
         datrecduration_set = 1;
       }
 
-      if(option_index == 17)
+      if(option_index == 17)  /* merge */
+      {
+        if(chns > 1)
+        {
+          merge_set = 1;
+        }
+      }
+
+      if(option_index == 18)
       {
         fprintf(stdout, "\n EDF generator version " PROGRAM_VERSION
           " Copyright (c) 2020 - 2021 Teunis van Beelen   email: teuniz@protonmail.com\n"
@@ -376,8 +392,8 @@ int main(int argc, char **argv)
           "\n options:\n"
           "\n --type=edf|bdf default: edf\n"
           "\n --len=file duration in seconds default: 30\n"
-          "\n --rate=samplerate in herz default: 500 (integer only)\n"
-          "\n --freq=signal frequency in herz default: 10 (may be a real number e.g. 333.17)\n"
+          "\n --rate=samplerate in Hertz default: 500 (integer only)\n"
+          "\n --freq=signal frequency in Hertz default: 10 (may be a real number e.g. 333.17)\n"
           "\n --wave=sine | square | ramp | triangle | white-noise | pink-noise default: sine\n"
           "\n --dcycle=dutycycle: 0.1-100%% default: 50\n"
           "\n --phase=phase: 0-360degr. default: 0\n"
@@ -392,6 +408,7 @@ int main(int argc, char **argv)
           "\n --datrec-duration=duration of a datarecord in seconds default: 1 (may be a real number e.g. 0.25)\n"
           "                   effective samplerate and signal frequency will be inversely proportional to the datarecord duration\n"
           "\n --signals=number of signals default: 1 in case of multiple signals, signal parameters must be separated by a comma e.g.: --rate=1000,800,133\n"
+          "\n --merge  merge all signals into one trace, requires equal samplerate and equal physical max/min and equal digital max/min and equal physical dimension (units) for all signals\n"
           "\n --help\n\n"
           " Note: decimal separator (if any) must be a dot, do not use a comma as a decimal separator\n\n"
         );
@@ -496,6 +513,48 @@ int main(int argc, char **argv)
         fprintf(stderr, "error: digital minimum must be less than digital maximum\n");
         return EXIT_FAILURE;
       }
+
+    if(merge_set)
+    {
+      if(chan)
+      {
+        if(sig_par.sf[chan] != sig_par.sf[0])
+        {
+          fprintf(stderr, "error: option --merge requires that all signals have equal samplerate\n");
+          return EXIT_FAILURE;
+        }
+
+        if(sig_par.physmax[chan] != sig_par.physmax[0])
+        {
+          fprintf(stderr, "error: option --merge requires that all signals have equal value for physical maximum\n");
+          return EXIT_FAILURE;
+        }
+
+        if(sig_par.physmin[chan] != sig_par.physmin[0])
+        {
+          fprintf(stderr, "error: option --merge requires that all signals have equal value for physical minimum\n");
+          return EXIT_FAILURE;
+        }
+
+        if(sig_par.digmax[chan] != sig_par.digmax[0])
+        {
+          fprintf(stderr, "error: option --merge requires that all signals have equal value for digital maximum\n");
+          return EXIT_FAILURE;
+        }
+
+        if(sig_par.digmin[chan] != sig_par.digmin[0])
+        {
+          fprintf(stderr, "error: option --merge requires that all signals have equal for digital minimum\n");
+          return EXIT_FAILURE;
+        }
+
+        if(strcmp(sig_par.physdim[chan], sig_par.physdim[0]))
+        {
+          fprintf(stderr, "error: option --merge requires that all signals have equal physical dimension (units)\n");
+          return EXIT_FAILURE;
+        }
+      }
+    }
   }
 
   if(datrecduration_set)
@@ -523,19 +582,19 @@ int main(int argc, char **argv)
 
   for(i=0; i<chns; i++)
   {
-    sig_par.buf[i] = (double *)calloc(1, sig_par.sf[i] * sizeof(double));
+    sig_par.buf[i] = (double *)calloc(1, sizeof(double[sig_par.sf[i]]));
     if(sig_par.buf[i]==NULL)
     {
-      fprintf(stderr, "Malloc error line %i\n", __LINE__);
+      fprintf(stderr, "Malloc error line %i file %s\n", __LINE__, __FILE__);
       return EXIT_FAILURE;
     }
 
     if((sig_par.waveform[i] == WAVE_WHITE_NOISE) || (sig_par.waveform[i] == WAVE_PINK_NOISE))  /* white or pink noise */
     {
-      sig_par.randbuf[i] = (int *)calloc(1, sig_par.sf[i] * sizeof(int));
+      sig_par.randbuf[i] = (int *)calloc(1, sizeof(int[sig_par.sf[i]]));
       if(sig_par.randbuf[i]==NULL)
       {
-        fprintf(stderr, "Malloc error line %i\n", __LINE__);
+        fprintf(stderr, "Malloc error line %i file %s\n", __LINE__, __FILE__);
         return EXIT_FAILURE;
       }
     }
@@ -543,51 +602,51 @@ int main(int argc, char **argv)
 
   if(chns == 1)
   {
-    snprintf(str, 1024, "edfgenerator_%f", sig_par.sf[0] / datrecduration);
-    remove_trailing_zeros(str);
-    snprintf(str + strlen(str), 1024, "Hz_%s_%f", waveforms_str[sig_par.waveform[0]], sig_par.signalfreq[0] / datrecduration);
-    remove_trailing_zeros(str);
-    strlcat(str, "Hz", 1024);
+    snprintf(str, 1024, "edfgenerator_%fHz_%s_%fHz",
+             sig_par.sf[0] / datrecduration, waveforms_str[sig_par.waveform[0]], sig_par.signalfreq[0] / datrecduration);
 
     if((sig_par.waveform[0] >= WAVE_SQUARE) && (sig_par.waveform[0]<= WAVE_TRIANGLE))
     {
-      snprintf(str + strlen(str), 1024, "_%f", sig_par.dutycycle[0]);
-
-      remove_trailing_zeros(str);
-
-      strlcat(str, "pct", 1024);
+      snprintf(str + strlen(str), 1024, "_%fpct", sig_par.dutycycle[0]);
     }
 
     if(sig_par.waveform[0] <= WAVE_TRIANGLE)
     {
-      snprintf(str + strlen(str), 1024, "_%f", sig_par.phase[0]);
-
-      remove_trailing_zeros(str);
-
-      strlcat(str, "degr", 1024);
+      snprintf(str + strlen(str), 1024, "_%fdegr", sig_par.phase[0]);
     }
+
+    remove_trailing_zeros(str);
   }
   else
   {
     snprintf(str, 1024, "edfgenerator");
   }
 
+  if(merge_set)
+  {
+    edf_chns = 1;
+  }
+  else
+  {
+    edf_chns = chns;
+  }
+
   if(filetype == FILETYPE_BDF)
   {
     strlcat(str, ".bdf", 1024);
 
-    hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_BDFPLUS, chns);
+    hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_BDFPLUS, edf_chns);
   }
   else if(filetype == FILETYPE_EDF)
     {
       strlcat(str, ".edf", 1024);
 
-      hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_EDFPLUS, chns);
+      hdl = edfopen_file_writeonly(str, EDFLIB_FILETYPE_EDFPLUS, edf_chns);
     }
 
   if(hdl<0)
   {
-    fprintf(stderr, "error: edfopen_file_writeonly() line %i\n", __LINE__);
+    fprintf(stderr, "error: edfopen_file_writeonly() line %i file %s\n", __LINE__, __FILE__);
 
     return EXIT_FAILURE;
   }
@@ -596,7 +655,7 @@ int main(int argc, char **argv)
   {
     if(edf_set_datarecord_duration(hdl, nearbyint(datrecduration * 100000)))
     {
-      fprintf(stderr, "error: edf_set_datarecord_duration() line %i\n", __LINE__);
+      fprintf(stderr, "error: edf_set_datarecord_duration() line %i file %s\n", __LINE__, __FILE__);
 
       return EXIT_FAILURE;
     }
@@ -604,37 +663,37 @@ int main(int argc, char **argv)
 
   if(edf_set_startdatetime(hdl, 2000, 1, 1, 0, 0, 0))
   {
-    fprintf(stderr, "error: edf_set_startdatetime() line %i\n", __LINE__);
+    fprintf(stderr, "error: edf_set_startdatetime() line %i file %s\n", __LINE__, __FILE__);
 
     return EXIT_FAILURE;
   }
 
-  for(i=0; i<chns; i++)
+  for(i=0; i<edf_chns; i++)
   {
     if(edf_set_samplefrequency(hdl, i, sig_par.sf[i]))
     {
-      fprintf(stderr, "error: edf_set_samplefrequency() line %i\n", __LINE__);
+      fprintf(stderr, "error: edf_set_samplefrequency() line %i file %s\n", __LINE__, __FILE__);
 
       return EXIT_FAILURE;
     }
 
     if(edf_set_digital_maximum(hdl, i, sig_par.digmax[i]))
     {
-      fprintf(stderr, "error: edf_set_digital_maximum() line %i\n", __LINE__);
+      fprintf(stderr, "error: edf_set_digital_maximum() line %i file %s\n", __LINE__, __FILE__);
 
       return EXIT_FAILURE;
     }
 
     if(edf_set_digital_minimum(hdl, i, sig_par.digmin[i]))
     {
-      fprintf(stderr, "error: edf_set_digital_minimum() line %i\n", __LINE__);
+      fprintf(stderr, "error: edf_set_digital_minimum() line %i file %s\n", __LINE__, __FILE__);
 
       return EXIT_FAILURE;
     }
 
     if(edf_set_physical_maximum(hdl, i, sig_par.physmax[i]))
     {
-      fprintf(stderr, "error: edf_set_physical_maximum() line %i\n", __LINE__);
+      fprintf(stderr, "error: edf_set_physical_maximum() line %i file %s\n", __LINE__, __FILE__);
 
       return EXIT_FAILURE;
     }
@@ -642,14 +701,14 @@ int main(int argc, char **argv)
 
     if(edf_set_physical_minimum(hdl, i, sig_par.physmin[i]))
     {
-      fprintf(stderr, "error: edf_set_physical_minimum() line %i\n", __LINE__);
+      fprintf(stderr, "error: edf_set_physical_minimum() line %i file %s\n", __LINE__, __FILE__);
 
       return EXIT_FAILURE;
     }
 
     if(edf_set_physical_dimension(hdl, i, sig_par.physdim[i]))
     {
-      fprintf(stderr, "error: edf_set_physical_dimension() line %i\n", __LINE__);
+      fprintf(stderr, "error: edf_set_physical_dimension() line %i file %s\n", __LINE__, __FILE__);
 
       return EXIT_FAILURE;
     }
@@ -683,7 +742,7 @@ int main(int argc, char **argv)
 
     if(edf_set_label(hdl, i, str))
     {
-      fprintf(stderr, "error: edf_set_label() line %i\n", __LINE__);
+      fprintf(stderr, "error: edf_set_label() line %i file %s\n", __LINE__, __FILE__);
 
       return EXIT_FAILURE;
     }
@@ -711,7 +770,7 @@ int main(int argc, char **argv)
       fd = open("/dev/urandom", O_RDONLY | O_NONBLOCK);
       if(fd < 0)
       {
-        fprintf(stderr, "error: cannot open /dev/urandom    line %i\n", __LINE__);
+        fprintf(stderr, "error: cannot open /dev/urandom    line %i file %s\n", __LINE__, __FILE__);
 
         return EXIT_FAILURE;
       }
@@ -720,8 +779,23 @@ int main(int argc, char **argv)
     }
   }
 
+  if(merge_set)
+  {
+    merge_buf = malloc(sizeof(double[sig_par.sf[0]]));
+    if(merge_buf == NULL)
+    {
+      fprintf(stderr, "Malloc error line %i file %s\n", __LINE__, __FILE__);
+      return EXIT_FAILURE;
+    }
+  }
+
   for(j=0; j<datrecs; j++)
   {
+    if(merge_set)
+    {
+      memset(merge_buf, 0, sizeof(double[sig_par.sf[0]]));
+    }
+
     for(chan=0; chan<chns; chan++)
     {
       if(sig_par.waveform[chan] == WAVE_SINE)
@@ -797,7 +871,7 @@ int main(int argc, char **argv)
             }
             else if((sig_par.waveform[chan] == WAVE_WHITE_NOISE) || (sig_par.waveform[chan] == WAVE_PINK_NOISE))
               {
-                err = read(fd, sig_par.randbuf[chan], sig_par.sf[chan] * sizeof(int));
+                err = read(fd, sig_par.randbuf[chan], sizeof(int[sig_par.sf[chan]]));
                 if(err != (sig_par.sf[chan] * 4))
                 {
                   perror(NULL);
@@ -838,10 +912,28 @@ int main(int argc, char **argv)
                   }
               }
 
-      if(edfwrite_physical_samples(hdl, sig_par.buf[chan]))
+      if(merge_set)
       {
-        fprintf(stderr, "error: edfwrite_physical_samples() line %i\n", __LINE__);
+        for(i=0; i<sig_par.sf[chan]; i++)
+        {
+          merge_buf[i] += sig_par.buf[chan][i];
+        }
+      }
+      else
+      {
+        if(edfwrite_physical_samples(hdl, sig_par.buf[chan]))
+        {
+          fprintf(stderr, "error: edfwrite_physical_samples() line %i file %s\n", __LINE__, __FILE__);
+          return EXIT_FAILURE;
+        }
+      }
+    }
 
+    if(merge_set)
+    {
+      if(edfwrite_physical_samples(hdl, merge_buf))
+      {
+        fprintf(stderr, "error: edfwrite_physical_samples() line %i file %s\n", __LINE__, __FILE__);
         return EXIT_FAILURE;
       }
     }
@@ -859,6 +951,7 @@ int main(int argc, char **argv)
     free(sig_par.buf[i]);
     free(sig_par.randbuf[i]);
   }
+  free(merge_buf);
 
   return EXIT_SUCCESS;
 }
