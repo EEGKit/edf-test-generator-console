@@ -544,7 +544,7 @@ int main(int argc, char **argv)
 
         if(sig_par.digmin[chan] != sig_par.digmin[0])
         {
-          fprintf(stderr, "error: option --merge requires that all signals have equal for digital minimum\n");
+          fprintf(stderr, "error: option --merge requires that all signals have equal value for digital minimum\n");
           return EXIT_FAILURE;
         }
 
@@ -607,12 +607,12 @@ int main(int argc, char **argv)
 
     if((sig_par.waveform[0] >= WAVE_SQUARE) && (sig_par.waveform[0]<= WAVE_TRIANGLE))
     {
-      snprintf(str + strlen(str), 1024, "_%fpct", sig_par.dutycycle[0]);
+      snprintf(str + strlen(str), 1024 - strlen(str), "_%fpct", sig_par.dutycycle[0]);
     }
 
     if(sig_par.waveform[0] <= WAVE_TRIANGLE)
     {
-      snprintf(str + strlen(str), 1024, "_%fdegr", sig_par.phase[0]);
+      snprintf(str + strlen(str), 1024 - strlen(str), "_%fdegr", sig_par.phase[0]);
     }
 
     remove_trailing_zeros(str);
@@ -653,7 +653,7 @@ int main(int argc, char **argv)
 
   if(datrecduration_set)
   {
-    if(edf_set_datarecord_duration(hdl, nearbyint(datrecduration * 100000)))
+    if(edf_set_datarecord_duration(hdl, (int)((datrecduration * 100000) + 0.5)))
     {
       fprintf(stderr, "error: edf_set_datarecord_duration() line %i file %s\n", __LINE__, __FILE__);
 
@@ -713,32 +713,39 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
     }
 
-    if(sig_par.waveform[i] == WAVE_SINE)
+    if(merge_set)
     {
-      snprintf(str, 18, "sine %.2fHz", sig_par.signalfreq[i] / datrecduration);
+      strlcpy(str, "composite", 18);
     }
-    else if(sig_par.waveform[i] == WAVE_SQUARE)
+    else
+    {
+      if(sig_par.waveform[i] == WAVE_SINE)
       {
-        snprintf(str, 18, "square %.2fHz", sig_par.signalfreq[i] / datrecduration);
+        snprintf(str, 18, "sine %.2fHz", sig_par.signalfreq[i] / datrecduration);
       }
-      else if(sig_par.waveform[i] == WAVE_RAMP)
+      else if(sig_par.waveform[i] == WAVE_SQUARE)
         {
-          snprintf(str, 18, "ramp %.2fHz", sig_par.signalfreq[i] / datrecduration);
+          snprintf(str, 18, "square %.2fHz", sig_par.signalfreq[i] / datrecduration);
         }
-        else if(sig_par.waveform[i] == WAVE_TRIANGLE)
+        else if(sig_par.waveform[i] == WAVE_RAMP)
           {
-            snprintf(str, 18, "triangle %.2fHz", sig_par.signalfreq[i] / datrecduration);
+            snprintf(str, 18, "ramp %.2fHz", sig_par.signalfreq[i] / datrecduration);
           }
-          else if(sig_par.waveform[i] == WAVE_WHITE_NOISE)
+          else if(sig_par.waveform[i] == WAVE_TRIANGLE)
             {
-              snprintf(str, 18, "white noise");
+              snprintf(str, 18, "triangle %.2fHz", sig_par.signalfreq[i] / datrecduration);
             }
-            else if(sig_par.waveform[i] == WAVE_PINK_NOISE)
+            else if(sig_par.waveform[i] == WAVE_WHITE_NOISE)
               {
-                snprintf(str, 18, "pink noise");
+                snprintf(str, 18, "white noise");
               }
+              else if(sig_par.waveform[i] == WAVE_PINK_NOISE)
+                {
+                  snprintf(str, 18, "pink noise");
+                }
 
-    remove_trailing_zeros(str);
+      remove_trailing_zeros(str);
+    }
 
     if(edf_set_label(hdl, i, str))
     {
