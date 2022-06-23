@@ -3,7 +3,7 @@
 *
 * Author: Teunis van Beelen
 *
-* Copyright (C) 2018 - 2021 Teunis van Beelen
+* Copyright (C) 2018 - 2022 Teunis van Beelen
 *
 * Email: teuniz@protonmail.com
 *
@@ -43,7 +43,7 @@
 #include "utils.h"
 
 #define PROGRAM_NAME       "edfgenerator"
-#define PROGRAM_VERSION    "1.09"
+#define PROGRAM_VERSION    "1.10"
 
 #define FILETYPE_EDF       (0)
 #define FILETYPE_BDF       (1)
@@ -456,26 +456,33 @@ int main(int argc, char **argv)
 
     if(sig_par.physmax[chan] > 9999999.5)
     {
-      fprintf(stderr, "error: physical maximum must be <= 9999999\n");
+      fprintf(stderr, "error signal %i: physical maximum must be <= 9999999\n", chan + 1);
       return EXIT_FAILURE;
     }
 
     if(sig_par.physmin[chan] < -9999999.5)
     {
-      fprintf(stderr, "error: physical minimum must be >= -9999999\n");
+      fprintf(stderr, "error signal %i: physical minimum must be >= -9999999\n", chan + 1);
       return EXIT_FAILURE;
     }
 
     if(sig_par.peakamp[chan] <= 0.009999)
     {
-      fprintf(stderr, "error: peak amplitude must be >= 0.01\n(amp: %f)\n", sig_par.peakamp[chan]);
+      fprintf(stderr, "error signal %i: peak amplitude must be >= 0.01\n(amp: %f)\n", chan + 1, sig_par.peakamp[chan]);
       return EXIT_FAILURE;
     }
 
-    if((sig_par.physmax[chan] < ((sig_par.peakamp[chan] * 1.05) + sig_par.dc_offset[chan])) || (sig_par.physmin[chan] > ((sig_par.peakamp[chan] * -1.05) + sig_par.dc_offset[chan])))
+    if(sig_par.physmax[chan] < ((sig_par.peakamp[chan] * 1.05) + sig_par.dc_offset[chan]))
     {
-      fprintf(stderr, "error: physical maximum must be higher than peak amplitude * 1.05 + DC-offset and physical minimum must be more lower than peak amplitude * -1.05 + DC-offset\n"
-                      "peak amplitude: %f   physical maximum: %f\n", sig_par.peakamp[chan], sig_par.physmax[chan]);
+      fprintf(stderr, "error signal %i: physical maximum must be higher than peak amplitude * 1.05 + DC-offset\n"
+                      "peak amplitude: %f   physical maximum: %f\n", chan + 1, sig_par.peakamp[chan], sig_par.physmax[chan]);
+      return EXIT_FAILURE;
+    }
+
+    if(sig_par.physmin[chan] > ((sig_par.peakamp[chan] * -1.05) + sig_par.dc_offset[chan]))
+    {
+      fprintf(stderr, "error signal %i: physical minimum must be lower than peak amplitude * -1.05 + DC-offset\n"
+                      "peak amplitude: %f   physical minimum: %f\n", chan + 1, sig_par.peakamp[chan], sig_par.physmin[chan]);
       return EXIT_FAILURE;
     }
 
@@ -483,13 +490,13 @@ int main(int argc, char **argv)
     {
       if(sig_par.digmax[chan] > 8388607)
       {
-        fprintf(stderr, "error: digital maximum must be <= 8388607\n");
+        fprintf(stderr, "error signal %i: digital maximum must be <= 8388607\n", chan + 1);
         return EXIT_FAILURE;
       }
 
       if(sig_par.digmin[chan] < -8388608)
       {
-        fprintf(stderr, "error: digital minimum must be >= -8388608\n");
+        fprintf(stderr, "error signal %i: digital minimum must be >= -8388608\n", chan + 1);
         return EXIT_FAILURE;
       }
     }
@@ -497,20 +504,20 @@ int main(int argc, char **argv)
       {
         if(sig_par.digmax[chan] > 32767)
         {
-          fprintf(stderr, "error: digital maximum must be <= 32767\n");
+          fprintf(stderr, "error signal %i: digital maximum must be <= 32767\n", chan + 1);
           return EXIT_FAILURE;
         }
 
         if(sig_par.digmin[chan] < -32768)
         {
-          fprintf(stderr, "error: digital minimum must be >= -32768\n");
+          fprintf(stderr, "error signal %i: digital minimum must be >= -32768\n", chan + 1);
           return EXIT_FAILURE;
         }
       }
 
       if(sig_par.digmin[chan] >= sig_par.digmax[chan])
       {
-        fprintf(stderr, "error: digital minimum must be less than digital maximum\n");
+        fprintf(stderr, "error signal %i: digital minimum must be less than digital maximum\n", chan + 1);
         return EXIT_FAILURE;
       }
 
@@ -520,37 +527,37 @@ int main(int argc, char **argv)
       {
         if(sig_par.sf[chan] != sig_par.sf[0])
         {
-          fprintf(stderr, "error: option --merge requires that all signals have equal samplerate\n");
+          fprintf(stderr, "error signal %i: option --merge requires that all signals have equal samplerate\n", chan + 1);
           return EXIT_FAILURE;
         }
 
         if(sig_par.physmax[chan] != sig_par.physmax[0])
         {
-          fprintf(stderr, "error: option --merge requires that all signals have equal value for physical maximum\n");
+          fprintf(stderr, "error signal %i: option --merge requires that all signals have equal value for physical maximum\n", chan + 1);
           return EXIT_FAILURE;
         }
 
         if(sig_par.physmin[chan] != sig_par.physmin[0])
         {
-          fprintf(stderr, "error: option --merge requires that all signals have equal value for physical minimum\n");
+          fprintf(stderr, "error signal %i: option --merge requires that all signals have equal value for physical minimum\n", chan + 1);
           return EXIT_FAILURE;
         }
 
         if(sig_par.digmax[chan] != sig_par.digmax[0])
         {
-          fprintf(stderr, "error: option --merge requires that all signals have equal value for digital maximum\n");
+          fprintf(stderr, "error signal %i: option --merge requires that all signals have equal value for digital maximum\n", chan + 1);
           return EXIT_FAILURE;
         }
 
         if(sig_par.digmin[chan] != sig_par.digmin[0])
         {
-          fprintf(stderr, "error: option --merge requires that all signals have equal value for digital minimum\n");
+          fprintf(stderr, "error signal %i: option --merge requires that all signals have equal value for digital minimum\n", chan + 1);
           return EXIT_FAILURE;
         }
 
         if(strcmp(sig_par.physdim[chan], sig_par.physdim[0]))
         {
-          fprintf(stderr, "error: option --merge requires that all signals have equal physical dimension (units)\n");
+          fprintf(stderr, "error signal %i: option --merge requires that all signals have equal physical dimension (units)\n", chan + 1);
           return EXIT_FAILURE;
         }
       }
